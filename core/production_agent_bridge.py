@@ -91,6 +91,14 @@ def run(payload):
             claim_token=task["claim_token"],
         )
         return {"claimed": True, "run": peeked.get("run"), "work_order": work_order}
+    if action == "heartbeat_claim":
+        return production_agent_jobs.heartbeat_claim(
+            root,
+            str(payload.get("run_id") or ""),
+            str(payload.get("task_id") or ""),
+            str(payload.get("claim_token") or ""),
+            actor=str(payload.get("actor") or "codex-worker"),
+        )
     if action == "apply_worker_proposal":
         return production_agent_execution.apply_proposal(
             root,

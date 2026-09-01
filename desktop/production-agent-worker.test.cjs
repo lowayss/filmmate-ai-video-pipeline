@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const {proposalPrompt, failureMessage} = require('./production-agent-worker.cjs');
+const {proposalPrompt, failureMessage, DEFAULT_CLAIM_HEARTBEAT_MS} = require('./production-agent-worker.cjs');
 
 test('production worker prompt is read-only and approval-free', () => {
   const prompt = proposalPrompt({task_id:'task:1',suggested_tool:'save_production_object',stage:'storyboard'});
@@ -13,11 +13,14 @@ test('production worker prompt is read-only and approval-free', () => {
   assert.doesNotMatch(prompt, /workspace-write/);
 });
 
-test('worker source invokes Codex in read-only sandbox', () => {
+test('worker source invokes Codex in read-only sandbox and renews claims', () => {
   const source = fs.readFileSync(path.join(__dirname, 'production-agent-worker.cjs'), 'utf8');
   assert.match(source, /'--sandbox', 'read-only'/);
   assert.match(source, /apply_worker_proposal/);
   assert.match(source, /claim_work_order/);
+  assert.match(source, /heartbeat_claim/);
+  assert.match(source, /claim_heartbeat_failed/);
+  assert.equal(DEFAULT_CLAIM_HEARTBEAT_MS, 30000);
   assert.doesNotMatch(source, /'--sandbox', 'workspace-write'/);
 });
 
