@@ -130,7 +130,7 @@ def run(payload):
             except Exception:
                 pass
             raise
-        return {"claimed": True, "run": production_agent_jobs.refresh_run(root, run_id, None, aliases, actor=actor), "work_order": work_order}
+        return {"claimed": True, "run": peeked.get("run"), "work_order": work_order}
     if action == "heartbeat_claim":
         return production_agent_jobs.heartbeat_claim(
             root,
