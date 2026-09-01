@@ -21,7 +21,7 @@ from types import SimpleNamespace
 import package_compiler
 import scene_breakdown
 import workspace_compiler
-from core import filmmate_documents, hap_core, production_agent_jobs, production_commands, production_orchestrator, prompt_ir, prompt_jobs
+from core import filmmate_documents, hap_core, production_agent_execution, production_agent_jobs, production_commands, production_orchestrator, prompt_ir, prompt_jobs
 from package_compiler import compile_package
 from scene_breakdown import generate_breakdown
 from screenplay_analyzer import analyze_screenplay
@@ -475,6 +475,32 @@ def call(name, args):
             if args["action"] in {"resume", "retry_task"} and not snapshot.get("cancelled"):
                 snapshot = production_agent_jobs.refresh_run(root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex"))
             return result(snapshot)
+        if name == "claim_production_work_order":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            peeked = production_agent_jobs.peek_next(root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex-worker"))
+            task = peeked.get("task")
+            if not task:
+                return result({"claimed": False, "run": peeked.get("run"), "work_order": None})
+            mode, reason = production_agent_execution.task_execution_mode(task)
+            if peeked.get("run", {}).get("state") != "READY" or mode != "proposal":
+                return result({"claimed": False, "run": peeked.get("run"), "work_order": {
+                    "schema_version": 1, "task_id": task.get("task_id"), "stage": task.get("stage"),
+                    "status": task.get("plan_status"), "suggested_tool": task.get("suggested_tool"),
+                    "instruction": task.get("instruction"), "mode": "manual",
+                    "manual_reason": reason or peeked.get("run", {}).get("state"),
+                }})
+            claimed = production_agent_jobs.claim_next(root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex-worker"))
+            current = claimed["task"]
+            work_order = production_agent_execution.build_work_order(
+                root, projection, aliases, run_id=args["run_id"], task_id=current["task_id"], claim_token=current["claim_token"]
+            )
+            return result({"claimed": True, "run": peeked.get("run"), "work_order": work_order})
+        if name == "submit_production_work_proposal":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_agent_execution.apply_proposal(
+                root, projection, aliases, run_id=args["run_id"], task_id=args["task_id"],
+                claim_token=args["claim_token"], proposal=args["proposal"], actor=str(args.get("actor") or "codex-worker")
+            ))
         if name == "prepare_scene":
             _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
             return result(production_commands.prepare_scene(projection, aliases))
@@ -655,6 +681,23 @@ SEMANTIC_TOOLS = [
         "name": "control_production_run",
         "description": "Pause, resume, cancel, release, fail, or explicitly retry a Production Agent task. It never marks creative work complete; canonical refresh decides that.",
         "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"}, "action": {"type": "string", "enum": ["pause", "resume", "cancel", "release_task", "fail_task", "retry_task"]}, "task_id": {"type": "string"}, "claim_token": {"type": "string"}, "error": {"type": "string"}, "actor": {"type": "string"}}, "required": ["project", "scene", "run_id", "action"]},
+    },
+    {
+        "name": "claim_production_work_order",
+        "description": "Claim the first automatically executable Production Agent task and return a read-only Codex work order. Prompt, QA/review, blocked, and approval work is not auto-claimed.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"}, "actor": {"type": "string"}}, "required": ["project", "scene", "run_id"]},
+    },
+    {
+        "name": "submit_production_work_proposal",
+        "description": "Validate and apply one claimed worker proposal through the exact allowlisted semantic tool, then re-read HAP. It cannot approve work, bypass QA, perform low-level HAP writes, or mark a task complete.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"},
+                "task_id": {"type": "string"}, "claim_token": {"type": "string"}, "proposal": {"type": "object"}, "actor": {"type": "string"}
+            },
+            "required": ["project", "scene", "run_id", "task_id", "claim_token", "proposal"]
+        },
     },
     {
         "name": "prepare_scene",

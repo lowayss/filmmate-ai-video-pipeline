@@ -15,6 +15,7 @@ const {
   promptHistory,
 } = require("./prompt-job-client.cjs");
 const {startCodexPromptJob, cancelCodexPromptJob} = require("./codex-worker.cjs");
+const {startProductionAgentWorker, cancelProductionAgentWorker, activeProductionAgentWorkers} = require("./production-agent-worker.cjs");
 const {createProjectPathResolver} = require("./project-paths.cjs");
 const {createPythonBridge} = require("./python-bridge.cjs");
 const {buildSceneProductionState} = require("./production-state.cjs");
@@ -227,6 +228,28 @@ ipcMain.handle("production-agent:get-run", async (_event, project, scene, runId)
 });
 ipcMain.handle("production-agent:control-run", async (_event, project, scene, request = {}) => {
   return await pythonBridge.runProductionAgentAsync(productionAgentPayload(project, scene, {...request, action:"control_run", actor:"filmmate-user"}));
+});
+ipcMain.handle("production-agent:start-worker", async (_event, project, scene, runId) => {
+  const basePayload = productionAgentPayload(project, scene);
+  const sendEvent = event => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send("production-agent:worker-event", {project, scene, ...event});
+    }
+  };
+  return startProductionAgentWorker({
+    projectDir: basePayload.project_root,
+    bridge: pythonBridge,
+    basePayload,
+    runId,
+    onEvent: sendEvent,
+  });
+});
+ipcMain.handle("production-agent:cancel-worker", async (_event, runId) => {
+  return await cancelProductionAgentWorker(runId);
+});
+ipcMain.handle("production-agent:worker-status", (_event, runId) => {
+  const active = activeProductionAgentWorkers();
+  return {run_id:String(runId || ""), active:active.includes(String(runId || "")), active_run_ids:active};
 });
 
 ipcMain.handle("project:delete", async (_event, project) => {
