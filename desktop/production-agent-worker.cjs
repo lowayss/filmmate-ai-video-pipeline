@@ -42,6 +42,19 @@ function failureMessage(code, stderr, stdout, processError) {
   return `E_PRODUCTION_AGENT_CODEX_EXIT_${exit}${diagnostic ? `: ${diagnostic}` : ''}`;
 }
 
+function recoverableStopReason(error) {
+  const message = String(error?.message || error || '');
+  if (message.includes('E_PRODUCTION_AGENT_RUN_NOT_CLAIMABLE:')) return 'run_not_claimable';
+  if (message.includes('E_PRODUCTION_AGENT_RUN_NOT_EXECUTABLE')) return 'run_not_executable';
+  if (message.includes('E_PRODUCTION_AGENT_CLAIM_CHECKPOINT_CHANGED')) return 'claim_invalidated';
+  if (message.includes('E_PRODUCTION_AGENT_TASK_CLAIM_INVALID')) return 'claim_invalidated';
+  if (message.includes('E_PRODUCTION_AGENT_NO_CLAIMABLE_TASK')) return 'claim_invalidated';
+  if (message.includes('E_PRODUCTION_AGENT_TASK_ALREADY_CLAIMED')) return 'claim_invalidated';
+  if (message.includes('E_PRODUCTION_AGENT_TASK_CLAIM_RACE')) return 'claim_invalidated';
+  if (message.includes('E_PRODUCTION_AGENT_TASK_NOT_CLAIMABLE:')) return 'claim_invalidated';
+  return null;
+}
+
 function proposalPrompt(workOrder) {
   return [
     'You are the FilmMate Production Agent execution worker.',
@@ -177,12 +190,20 @@ async function workerLoop(worker) {
   const {bridge, basePayload, projectDir, onEvent, spawn} = worker;
   try {
     for (let step = 0; step < worker.maxSteps && !worker.cancelled; step += 1) {
-      const claimed = await bridge.runProductionAgentAsync({
-        ...basePayload,
-        action: 'claim_work_order',
-        run_id: worker.runId,
-        actor: 'codex-worker',
-      });
+      let claimed;
+      try {
+        claimed = await bridge.runProductionAgentAsync({
+          ...basePayload,
+          action: 'claim_work_order',
+          run_id: worker.runId,
+          actor: 'codex-worker',
+        });
+      } catch (error) {
+        const reason = recoverableStopReason(error);
+        if (!reason) throw error;
+        emit(onEvent, {type: 'stopped', run_id: worker.runId, reason, error: String(error?.message || error)});
+        return;
+      }
       if (!claimed?.claimed) {
         emit(onEvent, {
           type: 'stopped',
@@ -256,6 +277,13 @@ async function workerLoop(worker) {
           return;
         }
       } catch (error) {
+        const reason = recoverableStopReason(error);
+        if (reason) {
+          await releaseClaim(bridge, basePayload, worker.currentClaim, reason);
+          worker.currentClaim = null;
+          emit(onEvent, {type: 'stopped', run_id: worker.runId, reason, error: String(error?.message || error)});
+          return;
+        }
         await failClaim(bridge, basePayload, worker.currentClaim, error);
         worker.currentClaim = null;
         emit(onEvent, {type: 'failed', run_id: worker.runId, task_id: workOrder.task_id, error: String(error?.message || error)});
@@ -322,4 +350,5 @@ module.exports = {
   activeProductionAgentWorkers,
   proposalPrompt,
   failureMessage,
+  recoverableStopReason,
 };
