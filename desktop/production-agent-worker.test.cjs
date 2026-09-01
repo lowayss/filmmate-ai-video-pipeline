@@ -20,6 +20,8 @@ test('worker source invokes Codex in read-only sandbox and renews claims', () =>
   assert.match(source, /claim_work_order/);
   assert.match(source, /heartbeat_claim/);
   assert.match(source, /claim_heartbeat_failed/);
+  assert.match(source, /currentChild\?\.kill\('SIGTERM'\)/);
+  assert.match(source, /releaseClaim\(bridge, basePayload, worker\.currentClaim, 'claim_heartbeat_failed'\)/);
   assert.equal(DEFAULT_CLAIM_HEARTBEAT_MS, 30000);
   assert.doesNotMatch(source, /'--sandbox', 'workspace-write'/);
 });
