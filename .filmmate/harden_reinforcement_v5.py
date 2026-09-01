@@ -5,6 +5,10 @@ text = path.read_text(encoding="utf-8")
 
 replacements = [
 (
+'''def _payload(entity):\n    raw = (entity or {}).get("current_revision", {}).get("payload_json")\n''',
+'''def _payload(entity):\n    revision = (entity or {}).get("current_revision") or {}\n    raw = revision.get("payload_json")\n''',
+),
+(
 '''            revision_id = (target.get("current_revision") or {}).get("revision_id")\n            if not revision_id:\n                raise ValueError("E_PRODUCTION_DEPENDENCY_REVISION_MISSING")\n            dependencies.append((revision_id, str(selector.get("role") or "input")))\n''',
 '''            revision_id = (target.get("current_revision") or {}).get("revision_id")\n            if not revision_id:\n                raise ValueError("E_PRODUCTION_DEPENDENCY_REVISION_MISSING")\n            db_current = hap_core.current_revision(db, target["entity_id"])\n            if db_current is None:\n                raise ValueError("E_PRODUCTION_DEPENDENCY_REVISION_MISSING")\n            if db_current["revision_id"] != revision_id:\n                raise ValueError(f"E_PRODUCTION_DEPENDENCY_CHANGED:{revision_id}:{db_current['revision_id']}")\n            dependencies.append((db_current["revision_id"], str(selector.get("role") or "input")))\n''',
 ),
