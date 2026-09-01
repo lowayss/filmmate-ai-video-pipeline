@@ -189,14 +189,35 @@ def artifact_rows(db, revision_id):
 def current_map(db):
     return {row["entity_id"]: row for row in db.execute("SELECT r.* FROM revisions r JOIN (SELECT entity_id, MAX(rev_no) n FROM revisions GROUP BY entity_id) x ON x.entity_id=r.entity_id AND x.n=r.rev_no")}
 
+def dependency_details(db, revision_id, currents):
+    rows = db.execute(
+        "SELECT d.upstream_revision_id,d.role,r.entity_id,e.entity_type,e.logical_key,r.rev_no "
+        "FROM dependencies d "
+        "JOIN revisions r ON r.revision_id=d.upstream_revision_id "
+        "JOIN entities e ON e.entity_id=r.entity_id "
+        "WHERE d.downstream_revision_id=? "
+        "ORDER BY d.role,e.entity_type,e.logical_key,d.upstream_revision_id",
+        (revision_id,),
+    ).fetchall()
+    details = []
+    for row in rows:
+        current = currents.get(row["entity_id"])
+        current_revision_id = current["revision_id"] if current is not None else None
+        details.append({
+            "role": row["role"],
+            "upstream_entity_id": row["entity_id"],
+            "upstream_entity_type": row["entity_type"],
+            "upstream_logical_key": row["logical_key"],
+            "used_revision_id": row["upstream_revision_id"],
+            "used_rev_no": row["rev_no"],
+            "current_revision_id": current_revision_id,
+            "current_rev_no": current["rev_no"] if current is not None else None,
+            "stale": current_revision_id != row["upstream_revision_id"],
+        })
+    return details
+
 def dependency_stale(db, revision_id, currents):
-    deps = db.execute("SELECT upstream_revision_id FROM dependencies WHERE downstream_revision_id=?", (revision_id,)).fetchall()
-    for dep in deps:
-        upstream = db.execute("SELECT entity_id FROM revisions WHERE revision_id=?", (dep[0],)).fetchone()
-        current = currents.get(upstream[0])
-        if not upstream or current is None or current["revision_id"] != dep[0]:
-            return True
-    return False
+    return any(item["stale"] for item in dependency_details(db, revision_id, currents))
 
 def artifact_errors(root, db, revision_id):
     errors = []
@@ -397,8 +418,14 @@ def derive_state(root, db, entity, revision, currents):
     blockers = db.execute("SELECT code,reason FROM blockers WHERE revision_id=? AND resolved_at IS NULL", (revision["revision_id"],)).fetchall()
     if blockers: return {"state": "blocked", "errors": [f"{x['code']}: {x['reason']}" for x in blockers]}
     errors = artifact_errors(root, db, revision["revision_id"])
-    if dependency_stale(db, revision["revision_id"], currents):
-        return {"state": "stale", "errors": ["an upstream revision changed", *errors]}
+    stale_dependencies = [item for item in dependency_details(db, revision["revision_id"], currents) if item["stale"]]
+    if stale_dependencies:
+        stale_errors = [
+            f"{item['role']}: {item['upstream_entity_type']} {item['upstream_logical_key']} changed "
+            f"from {item['used_revision_id']} to {item['current_revision_id'] or 'missing'}"
+            for item in stale_dependencies
+        ]
+        return {"state": "stale", "errors": [*stale_errors, *errors]}
     errors.extend(contract_errors(db, entity["entity_type"], revision["revision_id"]))
     if errors: return {"state": "working" if not artifact_rows(db, revision["revision_id"]) else "unverified", "errors": errors}
     qa = latest_passing_qa(root, db, revision["revision_id"])
@@ -417,7 +444,8 @@ def write_projection(root, db):
         revision = currents.get(entity["entity_id"])
         state = derive_state(root, db, entity, revision, currents)
         artifacts = [dict(x) for x in artifact_rows(db, revision["revision_id"])] if revision else []
-        entities.append({**dict(entity), "current_revision": row_dict(revision), **state, "artifacts": artifacts})
+        dependencies = dependency_details(db, revision["revision_id"], currents) if revision else []
+        entities.append({**dict(entity), "current_revision": row_dict(revision), **state, "artifacts": artifacts, "dependencies": dependencies})
     source_links = [dict(row) for row in db.execute(
         "SELECT source_id, project_id, label, kind, path, required, status, fingerprint, metadata_json, checked_at, created_at "
         "FROM source_links ORDER BY required DESC, kind, label"
