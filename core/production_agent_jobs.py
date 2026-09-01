@@ -86,8 +86,6 @@ def _event(db, run_id: str, event: str, actor: str, detail: dict[str, Any] | Non
 
 
 def _projection_for_plan(root: Path, db, projection: dict[str, Any] | None):
-    # Tests may inject a synthetic projection. Production callers pass None so
-    # the plan is rebuilt from canonical HAP state while the write lock is held.
     return projection if projection is not None else hap_core.write_projection(root, db)
 
 
@@ -354,6 +352,11 @@ def _refresh_locked(
     return _run_row(db, run_id), plan
 
 
+def _commit_claim_rejection(db, message: str):
+    db.commit()
+    raise ValueError(message)
+
+
 def start_run(root: Path, projection: dict[str, Any] | None, scene_aliases, *, goal: str | None = None, target: str | None = None, actor: str = "codex"):
     db = _connect(root)
     try:
@@ -405,19 +408,19 @@ def claim_next(root: Path, run_id: str, projection: dict[str, Any] | None, scene
             root, db, run_id, projection, scene_aliases, actor=actor, claim_lease_seconds=claim_lease_seconds
         )
         if run["paused"] or run["cancelled"] or run["state"] != "READY":
-            raise ValueError(f"E_PRODUCTION_AGENT_RUN_NOT_CLAIMABLE:{run['state']}")
+            _commit_claim_rejection(db, f"E_PRODUCTION_AGENT_RUN_NOT_CLAIMABLE:{run['state']}")
         task = db.execute(
             "SELECT * FROM production_agent_tasks WHERE run_id=? AND state NOT IN ('COMPLETE','FAILED') ORDER BY ordinal,created_at LIMIT 1",
             (run_id,),
         ).fetchone()
         if task is None:
-            raise ValueError("E_PRODUCTION_AGENT_NO_CLAIMABLE_TASK")
+            _commit_claim_rejection(db, "E_PRODUCTION_AGENT_NO_CLAIMABLE_TASK")
         if task["state"] == "CLAIMED":
-            raise ValueError("E_PRODUCTION_AGENT_TASK_ALREADY_CLAIMED")
+            _commit_claim_rejection(db, "E_PRODUCTION_AGENT_TASK_ALREADY_CLAIMED")
         if task["state"] != "PENDING":
-            raise ValueError(f"E_PRODUCTION_AGENT_TASK_NOT_CLAIMABLE:{task['state']}")
+            _commit_claim_rejection(db, f"E_PRODUCTION_AGENT_TASK_NOT_CLAIMABLE:{task['state']}")
         if not task["suggested_tool"]:
-            raise ValueError("E_PRODUCTION_AGENT_TASK_REQUIRES_MANUAL_ACTION")
+            _commit_claim_rejection(db, "E_PRODUCTION_AGENT_TASK_REQUIRES_MANUAL_ACTION")
         token = hap_core.new_id(
             "agent_claim",
             f"{run_id}|{task['task_id']}|{actor}|{datetime.now(timezone.utc).isoformat()}",
