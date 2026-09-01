@@ -52,6 +52,9 @@ function recoverableStopReason(error) {
   if (message.includes('E_PRODUCTION_AGENT_TASK_ALREADY_CLAIMED')) return 'claim_invalidated';
   if (message.includes('E_PRODUCTION_AGENT_TASK_CLAIM_RACE')) return 'claim_invalidated';
   if (message.includes('E_PRODUCTION_AGENT_TASK_NOT_CLAIMABLE:')) return 'claim_invalidated';
+  if (message.includes('E_PRODUCTION_DEPENDENCY_CHANGED:')) return 'canonical_state_changed';
+  if (message.includes('revision_conflict:')) return 'canonical_state_changed';
+  if (message.includes('E_PRODUCTION_REVISION_SUPERSEDED')) return 'canonical_state_changed';
   return null;
 }
 
