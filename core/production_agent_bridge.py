@@ -51,7 +51,7 @@ def _manual_work_order(task, reason):
 
 def run(payload):
     action = str((payload or {}).get("action") or "plan").lower()
-    root, aliases, projection = _context(payload, include_projection=action in {"plan", "apply_worker_proposal"})
+    root, aliases, projection = _context(payload, include_projection=action == "plan")
     if action == "plan":
         return production_orchestrator.build_plan(
             projection,
@@ -142,7 +142,7 @@ def run(payload):
     if action == "apply_worker_proposal":
         return production_agent_execution.apply_proposal(
             root,
-            projection,
+            None,
             aliases,
             run_id=str(payload.get("run_id") or ""),
             task_id=str(payload.get("task_id") or ""),

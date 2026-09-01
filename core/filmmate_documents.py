@@ -18,7 +18,7 @@ MODULE_ROOT = Path(__file__).resolve().parents[1]
 if str(MODULE_ROOT) not in sys.path:
     sys.path.insert(0, str(MODULE_ROOT))
 
-from core import hap_core
+from core import hap_core, production_agent_claim_guard
 
 
 DOCUMENT_KINDS = {"screenplay", "conti"}
@@ -298,6 +298,7 @@ def save_document(payload: dict) -> dict:
     unchanged = False
     try:
         db.execute("BEGIN IMMEDIATE")
+        production_agent_claim_guard.assert_active_claim(db, payload.get("claim_guard"))
         scene, manifest = _scene_entity(db, scene_dir)
         scene_revision = hap_core.current_revision(db, scene["entity_id"])
         if scene_revision is None:

@@ -152,7 +152,7 @@ def task_execution_mode(task: dict[str, Any]) -> tuple[str, str | None]:
 
 def build_work_order(
     root: Path,
-    projection: dict[str, Any],
+    projection: dict[str, Any] | None,
     scene_aliases,
     *,
     run_id: str,
@@ -164,8 +164,9 @@ def build_work_order(
         raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID")
     if run.get("paused") or run.get("cancelled"):
         raise ValueError("E_PRODUCTION_AGENT_RUN_NOT_EXECUTABLE")
+    current_projection = projection if projection is not None else _fresh_projection(root)
     plan = production_orchestrator.build_plan(
-        projection,
+        current_projection,
         scene_aliases,
         goal=run.get("goal"),
         target=run.get("target"),
@@ -174,10 +175,10 @@ def build_work_order(
     if plan.get("checkpoint") != task.get("claim_checkpoint"):
         raise ValueError("E_PRODUCTION_AGENT_CLAIM_CHECKPOINT_CHANGED")
     mode, reason = task_execution_mode(task)
-    entities = _scene_entities(projection, scene_aliases)
+    entities = _scene_entities(current_projection, scene_aliases)
     affected_ids = set(json.loads(task.get("entity_ids_json") or "[]"))
     affected = [_entity_context(entity) for entity in entities if entity.get("entity_id") in affected_ids]
-    target = _target_entity(task, projection)
+    target = _target_entity(task, current_projection)
     documents = _document_context(root, scene_aliases) if task.get("suggested_tool") == "save_filmmate_document" else None
     return {
         "schema_version": 1,
@@ -198,7 +199,7 @@ def build_work_order(
         "reasons": json.loads(task.get("reasons_json") or "[]"),
         "target_entity": _entity_context(target) if target else None,
         "affected_entities": affected,
-        "upstream_dependencies": _upstream_dependencies(projection, scene_aliases, task.get("stage")),
+        "upstream_dependencies": _upstream_dependencies(current_projection, scene_aliases, task.get("stage")),
         "documents": documents,
         "execution_policy": {
             "codex_project_access": "read_only",
@@ -277,6 +278,15 @@ def _idempotency_key(work_order: dict[str, Any], normalized: dict[str, Any]) -> 
     return f"production-agent:{work_order['run_id']}:{work_order['task_id']}:{work_order['claim_checkpoint']}:{digest}"
 
 
+def _claim_guard(work_order: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "run_id": work_order["run_id"],
+        "task_id": work_order["task_id"],
+        "claim_token": work_order["claim_token"],
+        "claim_checkpoint": work_order["claim_checkpoint"],
+    }
+
+
 def _release(root: Path, work_order: dict[str, Any], error: str, actor: str):
     return production_agent_jobs.control_run(
         root,
@@ -291,7 +301,7 @@ def _release(root: Path, work_order: dict[str, Any], error: str, actor: str):
 
 def apply_proposal(
     root: Path,
-    projection: dict[str, Any],
+    projection: dict[str, Any] | None,
     scene_aliases,
     *,
     run_id: str,
@@ -304,6 +314,7 @@ def apply_proposal(
         root, projection, scene_aliases, run_id=run_id, task_id=task_id, claim_token=claim_token
     )
     normalized = validate_proposal(work_order, proposal)
+    claim_guard = _claim_guard(work_order)
     if normalized["decision"] == "needs_user_input":
         snapshot = _release(root, work_order, f"E_PRODUCTION_AGENT_USER_INPUT_REQUIRED:{normalized['reason']}", actor)
         return {"applied": False, "resolved": False, "progress_made": False, "stop_reason": "needs_user_input", "work_order": work_order, "run": snapshot}
@@ -324,11 +335,12 @@ def apply_proposal(
             "expected_revision_id": conti.get("revision_id"),
             "expected_scene_revision_id": screenplay.get("revision_id"),
             "idempotency_key": _idempotency_key(work_order, normalized),
+            "claim_guard": claim_guard,
         })
     elif normalized["tool"] == "save_production_object":
         target = work_order.get("target_entity") or {}
         dependencies = [
-            {"entity_id": item["entity_id"], "role": item["role"]}
+            {"entity_id": item["entity_id"], "role": item["role"], "revision_id": item["revision_id"]}
             for item in (work_order.get("upstream_dependencies") or [])
         ]
         evidence = [{
@@ -347,21 +359,20 @@ def apply_proposal(
             "producer": "production-agent-codex",
             "actor": "codex",
             "idempotency_key": _idempotency_key(work_order, normalized),
+            "claim_guard": claim_guard,
         }
-        mutation = production_commands.save_production_object(root, projection, scene_aliases, request)
+        mutation = production_commands.save_production_object(root, None, scene_aliases, request)
     else:
         raise ValueError("E_PRODUCTION_AGENT_TOOL_UNSUPPORTED")
 
-    fresh = _fresh_projection(root)
-    snapshot = production_agent_jobs.refresh_run(root, run_id, fresh, scene_aliases, actor=actor)
+    snapshot = production_agent_jobs.refresh_run(root, run_id, None, scene_aliases, actor=actor)
     task = next((item for item in snapshot.get("tasks") or [] if item.get("task_id") == task_id), None)
     progress_made = snapshot.get("checkpoint") != work_order.get("claim_checkpoint")
     resolved = bool(task and task.get("state") == "COMPLETE")
     if task and task.get("state") == "CLAIMED":
         message = "canonical_progress_partial" if progress_made else "E_PRODUCTION_AGENT_CANONICAL_STATE_UNCHANGED"
         _release(root, work_order, message, actor)
-        fresh = _fresh_projection(root)
-        snapshot = production_agent_jobs.refresh_run(root, run_id, fresh, scene_aliases, actor=actor)
+        snapshot = production_agent_jobs.refresh_run(root, run_id, None, scene_aliases, actor=actor)
     return {
         "applied": True,
         "resolved": resolved,
