@@ -107,14 +107,29 @@ def run(payload):
             refreshed = production_agent_jobs.refresh_run(root, run_id, None, aliases, actor=actor)
             latest_task = next((item for item in (refreshed.get("active_tasks") or []) if item.get("task_id") == task["task_id"]), task)
             return {"claimed": False, "run": refreshed, "work_order": _manual_work_order(latest_task, claimed_reason or "task_not_automatable")}
-        work_order = production_agent_execution.build_work_order(
-            root,
-            _fresh_projection(root),
-            aliases,
-            run_id=run_id,
-            task_id=task["task_id"],
-            claim_token=task["claim_token"],
-        )
+        try:
+            work_order = production_agent_execution.build_work_order(
+                root,
+                _fresh_projection(root),
+                aliases,
+                run_id=run_id,
+                task_id=task["task_id"],
+                claim_token=task["claim_token"],
+            )
+        except Exception:
+            try:
+                production_agent_jobs.control_run(
+                    root,
+                    run_id,
+                    "release_task",
+                    actor=actor,
+                    task_id=task["task_id"],
+                    claim_token=task["claim_token"],
+                    error="claim_work_order_revalidation_failed",
+                )
+            except Exception:
+                pass
+            raise
         return {"claimed": True, "run": production_agent_jobs.refresh_run(root, run_id, None, aliases, actor=actor), "work_order": work_order}
     if action == "heartbeat_claim":
         return production_agent_jobs.heartbeat_claim(
