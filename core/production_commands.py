@@ -34,7 +34,8 @@ STATUS_PRIORITY = {"blocked": 0, "stale": 1, "needs_review": 2, "in_progress": 3
 
 
 def _payload(entity):
-    raw = (entity or {}).get("current_revision", {}).get("payload_json")
+    revision = (entity or {}).get("current_revision") or {}
+    raw = revision.get("payload_json")
     if isinstance(raw, dict):
         return raw
     if not raw:
@@ -296,7 +297,12 @@ def save_production_object(root: Path, projection, scene_aliases, request):
             revision_id = (target.get("current_revision") or {}).get("revision_id")
             if not revision_id:
                 raise ValueError("E_PRODUCTION_DEPENDENCY_REVISION_MISSING")
-            dependencies.append((revision_id, str(selector.get("role") or "input")))
+            db_current = hap_core.current_revision(db, target["entity_id"])
+            if db_current is None:
+                raise ValueError("E_PRODUCTION_DEPENDENCY_REVISION_MISSING")
+            if db_current["revision_id"] != revision_id:
+                raise ValueError(f"E_PRODUCTION_DEPENDENCY_CHANGED:{revision_id}:{db_current['revision_id']}")
+            dependencies.append((db_current["revision_id"], str(selector.get("role") or "input")))
         expected_supplied = "expected_revision_id" in request
         request_body = {
             "object_type": object_type, "key": key, "payload": payload, "source_evidence": evidence,
@@ -330,6 +336,13 @@ def approve_production_object(root: Path, projection, scene_aliases, request):
     revision_id = (target.get("current_revision") or {}).get("revision_id")
     if not revision_id:
         raise ValueError("E_PRODUCTION_REVISION_MISSING")
+    db = hap_core.connect(root)
+    try:
+        current = hap_core.current_revision(db, target["entity_id"])
+    finally:
+        db.close()
+    if current is None or current["revision_id"] != revision_id:
+        raise ValueError("E_PRODUCTION_REVISION_SUPERSEDED")
     evidence = json.dumps({"delegated_grant_id": grant, "evidence": request.get("evidence")}, ensure_ascii=False)
     stream = io.StringIO()
     with redirect_stdout(stream):

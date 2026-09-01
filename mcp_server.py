@@ -21,7 +21,7 @@ from types import SimpleNamespace
 import package_compiler
 import scene_breakdown
 import workspace_compiler
-from core import filmmate_documents, hap_core, prompt_ir, prompt_jobs
+from core import filmmate_documents, hap_core, production_commands, prompt_ir, prompt_jobs
 from package_compiler import compile_package
 from scene_breakdown import generate_breakdown
 from screenplay_analyzer import analyze_screenplay
@@ -409,6 +409,15 @@ def get_filmmate_prompt_request(args):
     }
 
 
+def semantic_scene_context(project, scene):
+    root = require_hap(project)
+    target = scene_dir(project, scene)
+    manifest_file = target / "scene-data" / "scene-manifest.json"
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8")) if manifest_file.is_file() else {}
+    aliases = [scene, target.name, manifest.get("scene_id")]
+    return root, regenerate_hap_projection(project), [item for item in aliases if item]
+
+
 def submit_filmmate_prompt_bundle(args):
     payload = {**args, "actor": "codex"}
     root = require_hap(args["project"])
@@ -436,6 +445,25 @@ def submit_filmmate_prompt_bundle(args):
 
 def call(name, args):
     try:
+        if name == "prepare_scene":
+            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_commands.prepare_scene(projection, aliases))
+        if name == "get_generate_ready":
+            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_commands.build_scene_state(projection, aliases))
+        if name == "prepare_stale_regeneration":
+            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_commands.stale_regeneration_plan(projection, aliases))
+        if name == "save_production_object":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            saved = production_commands.save_production_object(root, projection, aliases, args)
+            refreshed = regenerate_hap_projection(args["project"])
+            return result({**saved, "production": production_commands.build_scene_state(refreshed, aliases)})
+        if name == "approve_production_object":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            approved = production_commands.approve_production_object(root, projection, aliases, args)
+            refreshed = regenerate_hap_projection(args["project"])
+            return result({**approved, "production": production_commands.build_scene_state(refreshed, aliases)})
         if name == "list_scene_projects":
             return result({"projects": [item.name for item in packages_root().iterdir() if item.is_dir() and not item.is_symlink() and not item.name.startswith(".")]})
         if name == "get_scene_status":
@@ -562,7 +590,61 @@ def call(name, args):
         return result({"error": str(exc)})
 
 
-TOOLS = [
+SEMANTIC_TOOLS = [
+    {
+        "name": "prepare_scene",
+        "description": "Build a production-aware work plan for one scene. Returns Generate-ready status, blockers, stale objects, and ordered next actions without writing fake completion state.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project", "scene"]},
+    },
+    {
+        "name": "get_generate_ready",
+        "description": "Read the canonical Production Object readiness model for one scene: Scene Analysis, Written Conti, References, Storyboard/Shots, Video Prompts, and optional Handoff Package.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project", "scene"]},
+    },
+    {
+        "name": "prepare_stale_regeneration",
+        "description": "Return an ordered regeneration plan for stale Production Objects, including the exact current revision that must be replaced. This plans regeneration; it does not claim new creative output exists.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project", "scene"]},
+    },
+    {
+        "name": "save_production_object",
+        "description": "Create or revise a semantic FilmMate Production Object under a scene. Dependencies are resolved to their latest canonical revisions automatically. expected_revision_id is required and must be null only when creating a new object.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string"}, "scene": {"type": "string"},
+                "object_type": {"type": "string", "enum": ["beat", "cut", "block", "asset", "prompt", "package"]},
+                "key": {"type": "string"},
+                "stage": {"type": "string", "enum": ["conti", "assets", "storyboard", "prompts", "handoff"]},
+                "payload": {"type": "object"}, "source_evidence": {"type": "object"},
+                "dependencies": {
+                    "type": "array",
+                    "items": {"type": "object", "properties": {
+                        "entity_id": {"type": "string"}, "object_type": {"type": "string"}, "key": {"type": "string"}, "role": {"type": "string"}
+                    }}
+                },
+                "expected_revision_id": {"type": ["string", "null"]},
+                "idempotency_key": {"type": "string"}, "producer": {"type": "string"}
+            },
+            "required": ["project", "scene", "object_type", "key", "payload", "source_evidence", "expected_revision_id"]
+        },
+    },
+    {
+        "name": "approve_production_object",
+        "description": "Approve the current verified revision of a Production Object using an explicit delegated user-policy grant. Stale, blocked, unverified, or superseded revisions cannot be approved.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string"}, "scene": {"type": "string"},
+                "entity_id": {"type": "string"}, "object_type": {"type": "string"}, "key": {"type": "string"},
+                "approver": {"type": "string"}, "evidence": {"type": "string"}, "delegated_grant_id": {"type": "string"}, "approval_id": {"type": "string"}
+            },
+            "required": ["project", "scene", "approver", "evidence", "delegated_grant_id"]
+        },
+    },
+]
+
+TOOLS = SEMANTIC_TOOLS + [
     {"name": "list_scene_projects", "description": "List contained FilmMake projects.", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "get_scene_status", "description": "Read the shared DB-regenerated stage projection; legacy files are evidence-only.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project"]}},
     {"name": "start_next_scene_stage", "description": "Read the next unresolved gate without writing a stage or completion value.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project"]}},
