@@ -179,6 +179,42 @@ class ProductionAgentJobTests(unittest.TestCase):
         refreshed_task = next(item for item in refreshed["tasks"] if item["task_id"] == task["task_id"])
         self.assertEqual(refreshed_task["state"], "CLAIMED")
 
+    def test_expired_claim_heartbeat_cannot_revive_lease(self):
+        run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        claimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
+        task = claimed["task"]
+        expired_at = "2000-01-01T00:00:00+00:00"
+        db = hap_core.connect(self.root)
+        try:
+            db.execute("UPDATE production_agent_tasks SET claimed_at=? WHERE task_id=?", (expired_at, task["task_id"]))
+            db.commit()
+        finally:
+            db.close()
+        with self.assertRaisesRegex(ValueError, "TASK_CLAIM_INVALID:EXPIRED"):
+            production_agent_jobs.heartbeat_claim(
+                self.root,
+                run["run_id"],
+                task["task_id"],
+                task["claim_token"],
+                actor="worker-a",
+                claim_lease_seconds=30,
+            )
+        db = hap_core.connect(self.root)
+        try:
+            persisted = db.execute("SELECT state,claim_token,claimed_at FROM production_agent_tasks WHERE task_id=?", (task["task_id"],)).fetchone()
+        finally:
+            db.close()
+        self.assertEqual(persisted["state"], "CLAIMED")
+        self.assertEqual(persisted["claim_token"], task["claim_token"])
+        self.assertEqual(persisted["claimed_at"], expired_at)
+        refreshed = production_agent_jobs.refresh_run(
+            self.root, run["run_id"], self.projection(), ["S1"], claim_lease_seconds=30
+        )
+        refreshed_task = next(item for item in refreshed["tasks"] if item["task_id"] == task["task_id"])
+        self.assertEqual(refreshed_task["state"], "PENDING")
+        self.assertIsNone(refreshed_task["claim_token"])
+        self.assertEqual(refreshed_task["last_error"], "claim_lease_expired")
+
 
 if __name__ == "__main__":
     unittest.main()
