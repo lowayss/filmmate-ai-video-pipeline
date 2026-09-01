@@ -280,29 +280,35 @@ def save_production_object(root: Path, projection, scene_aliases, request):
         if normalized_stage not in STAGE_KEYS:
             raise ValueError("E_PRODUCTION_STAGE_INVALID")
         payload = {**payload, "production_stage": normalized_stage}
-    owner = find_scene_entity(projection, scene_aliases)
-    if owner is None:
-        raise ValueError("E_PRODUCTION_SCENE_NOT_FOUND")
     db = hap_core.connect(root)
     try:
+        db.execute("BEGIN IMMEDIATE")
+        current_projection = projection if projection is not None else hap_core.write_projection(root, db)
+        owner = find_scene_entity(current_projection, scene_aliases)
+        if owner is None:
+            raise ValueError("E_PRODUCTION_SCENE_NOT_FOUND")
         entity = hap_core.ensure_entity(db, entity_type=object_type, logical_key=key, parent_id=owner["entity_id"], workflow_mode="full")
         dependencies = []
         for selector in request.get("dependencies") or []:
             if not isinstance(selector, dict):
                 raise ValueError("E_PRODUCTION_DEPENDENCY_INVALID")
             target = resolve_object(
-                projection, scene_aliases,
+                current_projection, scene_aliases,
                 entity_id=selector.get("entity_id"), object_type=selector.get("object_type"), logical_key=selector.get("key"),
             )
-            revision_id = (target.get("current_revision") or {}).get("revision_id")
-            if not revision_id:
+            projection_revision_id = (target.get("current_revision") or {}).get("revision_id")
+            if not projection_revision_id:
                 raise ValueError("E_PRODUCTION_DEPENDENCY_REVISION_MISSING")
             db_current = hap_core.current_revision(db, target["entity_id"])
             if db_current is None:
                 raise ValueError("E_PRODUCTION_DEPENDENCY_REVISION_MISSING")
-            if db_current["revision_id"] != revision_id:
-                raise ValueError(f"E_PRODUCTION_DEPENDENCY_CHANGED:{revision_id}:{db_current['revision_id']}")
-            dependencies.append((db_current["revision_id"], str(selector.get("role") or "input")))
+            current_revision_id = db_current["revision_id"]
+            if current_revision_id != projection_revision_id:
+                raise ValueError(f"E_PRODUCTION_DEPENDENCY_CHANGED:{projection_revision_id}:{current_revision_id}")
+            expected_revision_id = str(selector.get("revision_id") or "").strip()
+            if expected_revision_id and current_revision_id != expected_revision_id:
+                raise ValueError(f"E_PRODUCTION_DEPENDENCY_CHANGED:{expected_revision_id}:{current_revision_id}")
+            dependencies.append((current_revision_id, str(selector.get("role") or "input")))
         expected_supplied = "expected_revision_id" in request
         request_body = {
             "object_type": object_type, "key": key, "payload": payload, "source_evidence": evidence,
