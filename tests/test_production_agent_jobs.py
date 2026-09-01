@@ -78,6 +78,36 @@ class ProductionAgentJobTests(unittest.TestCase):
         reclaimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
         self.assertNotEqual(reclaimed["task"]["claim_token"], claimed["task"]["claim_token"])
 
+    def test_pause_releases_active_claim_and_invalidates_worker_token(self):
+        run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        claimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
+        token = claimed["task"]["claim_token"]
+        task_id = claimed["task"]["task_id"]
+        paused = production_agent_jobs.control_run(self.root, run["run_id"], "pause", actor="filmmate-user")
+        task = next(item for item in paused["tasks"] if item["task_id"] == task_id)
+        self.assertEqual(paused["state"], "PAUSED")
+        self.assertEqual(task["state"], "PENDING")
+        self.assertIsNone(task["claim_token"])
+        self.assertIsNone(task["claimed_at"])
+        self.assertTrue(any(event["event"] == "task_claim_released_by_run_control" and event["task_id"] == task_id for event in paused["events"]))
+        with self.assertRaisesRegex(ValueError, "RUN_NOT_EXECUTABLE:PAUSED"):
+            production_agent_jobs.heartbeat_claim(self.root, run["run_id"], task_id, token, actor="worker-a")
+        production_agent_jobs.control_run(self.root, run["run_id"], "resume")
+        reclaimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
+        self.assertNotEqual(reclaimed["task"]["claim_token"], token)
+
+    def test_cancel_releases_active_claim(self):
+        run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        claimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
+        task_id = claimed["task"]["task_id"]
+        cancelled = production_agent_jobs.control_run(self.root, run["run_id"], "cancel", actor="filmmate-user")
+        task = next(item for item in cancelled["tasks"] if item["task_id"] == task_id)
+        self.assertEqual(cancelled["state"], "CANCELLED")
+        self.assertTrue(cancelled["cancelled"])
+        self.assertEqual(task["state"], "PENDING")
+        self.assertIsNone(task["claim_token"])
+        self.assertIsNone(task["claimed_at"])
+
     def test_expired_claim_is_recovered_from_canonical_queue(self):
         run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
         claimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
