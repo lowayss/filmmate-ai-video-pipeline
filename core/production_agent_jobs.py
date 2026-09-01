@@ -155,6 +155,33 @@ def _base_task_state(step: dict[str, Any]) -> str:
     return "PENDING"
 
 
+def _release_claimed_tasks_for_control(db, run_id: str, actor: str, reason: str) -> int:
+    now = hap_core.now()
+    released = 0
+    rows = db.execute(
+        "SELECT * FROM production_agent_tasks WHERE run_id=? AND state='CLAIMED' ORDER BY ordinal,created_at",
+        (run_id,),
+    ).fetchall()
+    for row in rows:
+        base = _base_task_state({"status": row["plan_status"]})
+        cursor = db.execute(
+            "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error=NULL,updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
+            (base, now, row["task_id"], row["claim_token"]),
+        )
+        if cursor.rowcount != 1:
+            continue
+        released += 1
+        _event(
+            db,
+            run_id,
+            "task_claim_released_by_run_control",
+            actor,
+            {"reason": reason, "claim_actor": row["claim_actor"]},
+            row["task_id"],
+        )
+    return released
+
+
 def _run_state(plan: dict[str, Any], *, paused: bool = False, cancelled: bool = False) -> str:
     if cancelled:
         return "CANCELLED"
@@ -392,8 +419,8 @@ def heartbeat_claim(root: Path, run_id: str, task_id: str, claim_token: str, *, 
     try:
         db.execute("BEGIN IMMEDIATE")
         run = _run_row(db, run_id)
-        if run["cancelled"]:
-            raise ValueError("E_PRODUCTION_AGENT_RUN_CANCELLED")
+        if run["paused"] or run["cancelled"] or run["state"] != "READY":
+            raise ValueError(f"E_PRODUCTION_AGENT_RUN_NOT_EXECUTABLE:{run['state']}")
         task = _task_row(db, run_id, task_id)
         if task["state"] != "CLAIMED" or task["claim_token"] != claim_token:
             raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID")
@@ -429,16 +456,18 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
         if action == "pause":
             if run["cancelled"]:
                 raise ValueError("E_PRODUCTION_AGENT_RUN_CANCELLED")
+            released = _release_claimed_tasks_for_control(db, run_id, actor, "run_paused")
             db.execute("UPDATE production_agent_runs SET paused=1,state='PAUSED',updated_at=? WHERE run_id=?", (now, run_id))
-            _event(db, run_id, "run_paused", actor)
+            _event(db, run_id, "run_paused", actor, {"released_claims": released})
         elif action == "resume":
             if run["cancelled"]:
                 raise ValueError("E_PRODUCTION_AGENT_RUN_CANCELLED")
             db.execute("UPDATE production_agent_runs SET paused=0,state='READY',updated_at=? WHERE run_id=?", (now, run_id))
             _event(db, run_id, "run_resumed", actor)
         elif action == "cancel":
+            released = _release_claimed_tasks_for_control(db, run_id, actor, "run_cancelled")
             db.execute("UPDATE production_agent_runs SET cancelled=1,state='CANCELLED',updated_at=? WHERE run_id=?", (now, run_id))
-            _event(db, run_id, "run_cancelled", actor)
+            _event(db, run_id, "run_cancelled", actor, {"released_claims": released})
         elif action == "release_task":
             if not task_id or not claim_token:
                 raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_REQUIRED")
