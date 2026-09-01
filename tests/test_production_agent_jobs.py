@@ -44,6 +44,19 @@ class ProductionAgentJobTests(unittest.TestCase):
         self.assertTrue(claimed["task"]["claim_token"].startswith("agent_claim_"))
         self.assertIsNotNone(claimed["task"]["claimed_at"])
 
+    def test_repeated_start_run_creates_distinct_runs_and_latest_is_newest(self):
+        first = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        second = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        self.assertNotEqual(first["run_id"], second["run_id"])
+        latest = production_agent_jobs.latest_run(self.root, "S1")
+        self.assertEqual(latest["run_id"], second["run_id"])
+        db = hap_core.connect(self.root)
+        try:
+            count = db.execute("SELECT COUNT(*) FROM production_agent_runs WHERE scene_key='S1'").fetchone()[0]
+        finally:
+            db.close()
+        self.assertEqual(count, 2)
+
     def test_refresh_resolves_task_only_when_plan_no_longer_requires_it(self):
         run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
         first_task = run["active_tasks"][0]["task_id"]
