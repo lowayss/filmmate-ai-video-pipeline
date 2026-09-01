@@ -43,15 +43,10 @@ class ProductionCommandTests(unittest.TestCase):
             hap_core.cmd_commit(SimpleNamespace(project=str(root), entity="scene:S1", producer="test", payload='{"production_stage":"analysis"}', evidence='{"source":"screenplay"}', depends_on=[], revision_id=None))
             hap_core.cmd_add_entity(SimpleNamespace(project=str(root), entity_type="asset", key="hero", entity_id="asset:hero", parent="scene:S1", mode="full"))
             hap_core.cmd_commit(SimpleNamespace(project=str(root), entity="asset:hero", producer="test", payload='{"production_stage":"assets"}', evidence='{"source":"character"}', depends_on=[], revision_id=None))
-            db = hap_core.connect(root)
-            try:
-                projection = hap_core.write_projection(root, db)
-            finally:
-                db.close()
-            saved = production_commands.save_production_object(root, projection, ["S1"], {
+            saved = production_commands.save_production_object(root, None, ["S1"], {
                 "object_type": "cut", "key": "C01", "stage": "storyboard",
                 "payload": {"shot": "CU"}, "source_evidence": {"source": "conti"},
-                "dependencies": [{"entity_id": "asset:hero", "role": "character_reference"}],
+                "dependencies": [{"entity_id": "asset:hero", "role": "character_reference", "revision_id": "asset:hero@1"}],
                 "expected_revision_id": None, "producer": "codex",
             })
             self.assertTrue(saved["revision_id"].startswith("cut:"))
@@ -70,6 +65,38 @@ class ProductionCommandTests(unittest.TestCase):
                     "payload": {"shot": "MS"}, "source_evidence": {"source": "conti"},
                     "dependencies": [], "expected_revision_id": None,
                 })
+
+    def test_semantic_write_rejects_upstream_revision_change(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            hap_core.cmd_init(SimpleNamespace(project=str(root), title="Test", project_id="project:p", mode="full"))
+            hap_core.cmd_add_entity(SimpleNamespace(project=str(root), entity_type="scene", key="S1", entity_id="scene:S1", parent="project:p", mode="full"))
+            hap_core.cmd_commit(SimpleNamespace(project=str(root), entity="scene:S1", producer="test", payload='{"production_stage":"analysis"}', evidence='{"source":"screenplay"}', depends_on=[], revision_id=None))
+            hap_core.cmd_add_entity(SimpleNamespace(project=str(root), entity_type="asset", key="hero", entity_id="asset:hero", parent="scene:S1", mode="full"))
+            hap_core.cmd_commit(SimpleNamespace(project=str(root), entity="asset:hero", producer="test", payload='{"production_stage":"assets","version":1}', evidence='{"source":"character"}', depends_on=[], revision_id=None))
+            hap_core.cmd_commit(SimpleNamespace(project=str(root), entity="asset:hero", producer="test", payload='{"production_stage":"assets","version":2}', evidence='{"source":"character"}', depends_on=[], revision_id=None))
+
+            with self.assertRaisesRegex(ValueError, "E_PRODUCTION_DEPENDENCY_CHANGED:asset:hero@1:asset:hero@2"):
+                production_commands.save_production_object(root, None, ["S1"], {
+                    "object_type": "cut", "key": "C02", "stage": "storyboard",
+                    "payload": {"shot": "CU based on v1"}, "source_evidence": {"source": "agent-work-order"},
+                    "dependencies": [{"entity_id": "asset:hero", "role": "character_reference", "revision_id": "asset:hero@1"}],
+                    "expected_revision_id": None,
+                })
+            db = hap_core.connect(root)
+            try:
+                leaked = db.execute("SELECT 1 FROM entities WHERE entity_type='cut' AND logical_key='C02'").fetchone()
+            finally:
+                db.close()
+            self.assertIsNone(leaked)
+
+    def test_semantic_write_uses_immediate_transaction(self):
+        source = Path(production_commands.__file__).read_text(encoding="utf-8")
+        start = source.index("def save_production_object")
+        end = source.index("def approve_production_object")
+        mutation_source = source[start:end]
+        self.assertIn('db.execute("BEGIN IMMEDIATE")', mutation_source)
+        self.assertIn('selector.get("revision_id")', mutation_source)
 
 
 if __name__ == "__main__":
