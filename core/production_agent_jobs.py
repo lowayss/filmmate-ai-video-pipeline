@@ -333,6 +333,12 @@ def claim_next(root: Path, run_id: str, projection: dict[str, Any], scene_aliase
         db.close()
 
 
+def peek_next(root: Path, run_id: str, projection: dict[str, Any], scene_aliases, *, actor: str = "codex-worker"):
+    snapshot = refresh_run(root, run_id, projection, scene_aliases, actor=actor)
+    tasks = snapshot.get("active_tasks") or []
+    return {"run": snapshot, "task": tasks[0] if tasks else None}
+
+
 def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-user", task_id: str | None = None, claim_token: str | None = None, error: str | None = None):
     action = str(action or "").lower()
     db = _connect(root)
