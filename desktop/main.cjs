@@ -199,6 +199,20 @@ ipcMain.handle("project:connect-codex-sources", async (_event, project) => {
   return await connectCodexSources(projectDir);
 });
 
+ipcMain.handle("production-agent:run", async (_event, project, scene, request = {}) => {
+  const projectDir = projectPaths.resolveHapProject(project);
+  const {sceneDir} = projectPaths.resolveScene(project, scene);
+  const manifest = readJson(path.join(sceneDir, "scene-data", "scene-manifest.json")) || {};
+  const aliases = [scene, sceneDir.name, manifest.scene_id].filter(Boolean);
+  return await pythonBridge.runProductionAgentAsync({
+    project_root: projectDir,
+    scene_aliases: aliases,
+    goal: request?.goal,
+    target: request?.target,
+    previous_checkpoint: request?.previous_checkpoint,
+  });
+});
+
 ipcMain.handle("project:delete", async (_event, project) => {
   const projectName = String(project || "");
   const projectDir = projectPaths.resolveProject(projectName);
