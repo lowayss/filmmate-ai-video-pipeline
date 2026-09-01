@@ -2,7 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const {proposalPrompt, failureMessage, DEFAULT_CLAIM_HEARTBEAT_MS, recoverableStopReason} = require('./production-agent-worker.cjs');
+const {
+  proposalPrompt,
+  failureMessage,
+  DEFAULT_CLAIM_HEARTBEAT_MS,
+  DEFAULT_CANONICAL_REPLAN_LIMIT,
+  recoverableStopReason,
+  shouldRetryCanonicalReplan,
+} = require('./production-agent-worker.cjs');
 
 test('production worker prompt is read-only and approval-free', () => {
   const prompt = proposalPrompt({task_id:'task:1',suggested_tool:'save_production_object',stage:'storyboard'});
@@ -50,6 +57,28 @@ test('canonical mutation races are safe worker stops, not failures', () => {
   );
   assert.equal(recoverableStopReason(new Error('idempotency_conflict')), null);
   assert.equal(recoverableStopReason(new Error('E_PRODUCTION_PAYLOAD_INVALID')), null);
+});
+
+test('canonical replanning is bounded to one consecutive retry by default', () => {
+  assert.equal(DEFAULT_CANONICAL_REPLAN_LIMIT, 1);
+  assert.equal(shouldRetryCanonicalReplan('canonical_state_changed', 0), true);
+  assert.equal(shouldRetryCanonicalReplan('canonical_state_changed', 1), false);
+  assert.equal(shouldRetryCanonicalReplan('canonical_state_changed', 0, 0), false);
+  assert.equal(shouldRetryCanonicalReplan('claim_invalidated', 0, 1), false);
+});
+
+test('worker loop releases stale claim before replanning and resets after progress', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'production-agent-worker.cjs'), 'utf8');
+  const catchStart = source.indexOf('const reason = recoverableStopReason(error);', source.indexOf('action: \'apply_worker_proposal\''));
+  const replan = source.indexOf('shouldRetryCanonicalReplan(reason, worker.canonicalReplans, worker.maxCanonicalReplans)', catchStart);
+  const release = source.lastIndexOf('await releaseClaim(bridge, basePayload, worker.currentClaim, reason);', replan);
+  const increment = source.indexOf('worker.canonicalReplans += 1;', replan);
+  const continueIndex = source.indexOf('continue;', increment);
+  assert.ok(catchStart >= 0);
+  assert.ok(release > catchStart && release < replan);
+  assert.ok(increment > replan && continueIndex > increment);
+  assert.match(source, /type: 'replanning'/);
+  assert.match(source, /worker\.canonicalReplans = 0;/);
 });
 
 test('worker failures preserve diagnostics', () => {
