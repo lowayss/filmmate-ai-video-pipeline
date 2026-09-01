@@ -1,0 +1,79 @@
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+
+from core import hap_core, production_agent_jobs
+
+
+class ProductionAgentJobTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        hap_core.cmd_init(SimpleNamespace(project=str(self.root), title="Agent Queue", project_id="project:p", mode="full"))
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def projection(self, *, storyboard_state="stale", prompt_state="missing"):
+        storyboard_errors = ["character_reference: asset hero changed from asset:hero@1 to asset:hero@2"] if storyboard_state == "stale" else []
+        storyboard_deps = [{
+            "role": "character_reference", "upstream_entity_id": "asset:hero", "upstream_entity_type": "asset",
+            "upstream_logical_key": "hero", "used_revision_id": "asset:hero@1", "current_revision_id": "asset:hero@2",
+            "stale": storyboard_state == "stale",
+        }] if storyboard_state == "stale" else []
+        prompt_revision = None if prompt_state == "missing" else {"revision_id": "prompt:C01@1", "payload_json": "{}"}
+        return {
+            "entities": [
+                {"entity_id": "scene:S1", "entity_type": "scene", "logical_key": "S1", "parent_id": "project:p", "state": "accepted", "current_revision": {"revision_id": "scene:S1@1", "payload_json": "{}"}, "dependencies": [], "errors": []},
+                {"entity_id": "beat:B1", "entity_type": "beat", "logical_key": "B1", "parent_id": "scene:S1", "state": "accepted", "current_revision": {"revision_id": "beat:B1@1", "payload_json": "{}"}, "dependencies": [], "errors": []},
+                {"entity_id": "asset:hero", "entity_type": "asset", "logical_key": "hero", "parent_id": "scene:S1", "state": "accepted", "current_revision": {"revision_id": "asset:hero@2", "payload_json": "{}"}, "dependencies": [], "errors": []},
+                {"entity_id": "cut:C01", "entity_type": "cut", "logical_key": "C01", "parent_id": "scene:S1", "state": storyboard_state, "current_revision": {"revision_id": "cut:C01@3", "payload_json": "{}"}, "dependencies": storyboard_deps, "errors": storyboard_errors},
+                {"entity_id": "prompt:C01", "entity_type": "prompt", "logical_key": "C01", "parent_id": "scene:S1", "state": prompt_state, "current_revision": prompt_revision, "dependencies": [], "errors": ["no revision"] if prompt_state == "missing" else []},
+            ],
+            "prompt_jobs": [],
+        }
+
+    def test_run_claims_only_current_canonical_task(self):
+        run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        self.assertEqual(run["state"], "READY")
+        self.assertEqual(run["active_tasks"][0]["stage"], "storyboard")
+        claimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
+        self.assertEqual(claimed["task"]["state"], "CLAIMED")
+        self.assertEqual(claimed["task"]["suggested_tool"], "save_production_object")
+        self.assertTrue(claimed["task"]["claim_token"].startswith("agent_claim_"))
+
+    def test_refresh_resolves_task_only_when_plan_no_longer_requires_it(self):
+        run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        first_task = run["active_tasks"][0]["task_id"]
+        refreshed = production_agent_jobs.refresh_run(
+            self.root, run["run_id"], self.projection(storyboard_state="accepted"), ["S1"]
+        )
+        completed = next(task for task in refreshed["tasks"] if task["task_id"] == first_task)
+        self.assertEqual(completed["state"], "COMPLETE")
+        self.assertEqual(refreshed["active_tasks"][0]["stage"], "prompts")
+        self.assertNotEqual(refreshed["checkpoint"], run["checkpoint"])
+
+    def test_pause_resume_and_release_preserve_claim_ownership(self):
+        run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        paused = production_agent_jobs.control_run(self.root, run["run_id"], "pause")
+        self.assertEqual(paused["state"], "PAUSED")
+        with self.assertRaisesRegex(ValueError, "NOT_CLAIMABLE:PAUSED"):
+            production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"])
+        production_agent_jobs.control_run(self.root, run["run_id"], "resume")
+        claimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
+        with self.assertRaisesRegex(ValueError, "CLAIM_INVALID"):
+            production_agent_jobs.control_run(
+                self.root, run["run_id"], "release_task", task_id=claimed["task"]["task_id"], claim_token="wrong"
+            )
+        released = production_agent_jobs.control_run(
+            self.root, run["run_id"], "release_task", task_id=claimed["task"]["task_id"],
+            claim_token=claimed["task"]["claim_token"], error="worker stopped"
+        )
+        task = next(task for task in released["tasks"] if task["task_id"] == claimed["task"]["task_id"])
+        self.assertEqual(task["state"], "PENDING")
+        self.assertEqual(task["last_error"], "worker stopped")
+
+
+if __name__ == "__main__":
+    unittest.main()
