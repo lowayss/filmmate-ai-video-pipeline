@@ -167,6 +167,9 @@ def _document_record(root: Path, db: sqlite3.Connection, scene_dir: Path, kind: 
         revision_payload = _json(revision["payload_json"], {})
         state = hap_core.derive_state(root, db, entity, revision, hap_core.current_map(db))["state"]
     if not canonical and data:
+        # A mutable compatibility file must never inherit the HAP entity's
+        # verified/accepted label. Only an artifact on this exact revision is
+        # canonical evidence for the text shown in FilmMate.
         state = "legacy_unverified"
     structured_sync_required = bool(revision_payload.get("structured_sync_required"))
     return {
@@ -241,6 +244,12 @@ def _add_pending_structure_manifest(
     scene_id: str,
     base_revision_id: str | None,
 ):
+    """Register only the edited document boundary, never old shot structure.
+
+    The previous blocks/shots/validator artifacts describe the old written
+    storyboard. Copying them would make stale structure look current. Codex's
+    conhap workflow must create a later structured revision before prompting.
+    """
     data = _json_bytes({
         "schema_version": 2,
         "scene_id": scene_id,
@@ -355,6 +364,10 @@ def save_document(payload: dict) -> dict:
                     "base_revision_id": expected_revision_id,
                 }
                 if kind == "conti":
+                    # Do not inherit shot counts, validation claims, approval
+                    # claims, or any other structural metadata from the old
+                    # conti revision. The exact edited text is canonical, but
+                    # its cut/block structure is intentionally pending.
                     scene_id = manifest.get("scene_id") or scene_dir.name.split("_", 1)[0]
                     next_payload = {
                         "scene_id": previous_payload.get("scene_id") or scene_id,
