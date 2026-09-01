@@ -29,7 +29,9 @@
       "micro-shot.css",
       "micro-shot-ui.js",
       "codex-worker.cjs",
+      "production-agent-worker.cjs",
       "prompt-bundle.schema.json",
+      "production-agent-action.schema.json",
       "package.json"
     ],
     "extraResources": [
