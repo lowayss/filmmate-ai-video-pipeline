@@ -114,11 +114,11 @@ def _recover_expired_claims(db, run_id: str, actor: str, *, lease_seconds: int =
         if not _claim_expired(row, now=now_dt, lease_seconds=lease_seconds):
             continue
         base = _base_task_state({"status": row["plan_status"]})
-        db.execute(
+        cursor = db.execute(
             "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error='claim_lease_expired',updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
             (base, now, row["task_id"], row["claim_token"]),
         )
-        if db.execute("SELECT changes()").fetchone()[0] != 1:
+        if cursor.rowcount != 1:
             continue
         recovered += 1
         _event(
@@ -365,7 +365,10 @@ def claim_next(root: Path, run_id: str, projection: dict[str, Any], scene_aliase
             raise ValueError(f"E_PRODUCTION_AGENT_TASK_NOT_CLAIMABLE:{task['state']}")
         if not task["suggested_tool"]:
             raise ValueError("E_PRODUCTION_AGENT_TASK_REQUIRES_MANUAL_ACTION")
-        token = hap_core.new_id("agent_claim", f"{run_id}|{task['task_id']}|{actor}")
+        token = hap_core.new_id(
+            "agent_claim",
+            f"{run_id}|{task['task_id']}|{actor}|{datetime.now(timezone.utc).isoformat()}",
+        )
         now = hap_core.now()
         cursor = db.execute(
             "UPDATE production_agent_tasks SET state='CLAIMED',claim_actor=?,claim_token=?,claim_checkpoint=?,claimed_at=?,last_error=NULL,updated_at=? WHERE task_id=? AND state='PENDING'",
