@@ -1,0 +1,39 @@
+name: Apply FilmMate reinforcement v3
+
+on:
+  push:
+    branches: [reinforcement-v3]
+    paths:
+      - '.filmmate/reinforcement-v3.patch'
+      - '.github/workflows/apply-reinforcement-v3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: reinforcement-v3
+          fetch-depth: 0
+      - name: Apply desktop async patch
+        run: |
+          git apply --check .filmmate/reinforcement-v3.patch
+          git apply .filmmate/reinforcement-v3.patch
+          rm .filmmate/reinforcement-v3.patch
+          rm .github/workflows/apply-reinforcement-v3.yml
+      - name: Run Node regression tests
+        run: node --test desktop/*.test.cjs
+      - name: Run Python regression tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Verify Electron main syntax
+        run: node --check desktop/main.cjs
+      - name: Commit applied reinforcement
+        run: |
+          git config user.name "FilmMate CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Make desktop Python operations asynchronous"
+          git push origin HEAD:reinforcement-v3
