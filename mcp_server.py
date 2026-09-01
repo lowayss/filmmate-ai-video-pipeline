@@ -21,7 +21,7 @@ from types import SimpleNamespace
 import package_compiler
 import scene_breakdown
 import workspace_compiler
-from core import filmmate_documents, hap_core, production_commands, production_orchestrator, prompt_ir, prompt_jobs
+from core import filmmate_documents, hap_core, production_agent_jobs, production_commands, production_orchestrator, prompt_ir, prompt_jobs
 from package_compiler import compile_package
 from scene_breakdown import generate_breakdown
 from screenplay_analyzer import analyze_screenplay
@@ -451,6 +451,30 @@ def call(name, args):
                 projection, aliases, goal=args.get("goal"), target=args.get("target"),
                 previous_checkpoint=args.get("previous_checkpoint"),
             ))
+        if name == "start_production_run":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_agent_jobs.start_run(
+                root, projection, aliases, goal=args.get("goal"), target=args.get("target"), actor=str(args.get("actor") or "codex")
+            ))
+        if name == "get_production_run":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_agent_jobs.refresh_run(
+                root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex")
+            ))
+        if name == "claim_production_task":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_agent_jobs.claim_next(
+                root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex-worker")
+            ))
+        if name == "control_production_run":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            snapshot = production_agent_jobs.control_run(
+                root, args["run_id"], args["action"], actor=str(args.get("actor") or "codex"),
+                task_id=args.get("task_id"), claim_token=args.get("claim_token"), error=args.get("error"),
+            )
+            if args["action"] in {"resume", "retry_task"} and not snapshot.get("cancelled"):
+                snapshot = production_agent_jobs.refresh_run(root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex"))
+            return result(snapshot)
         if name == "prepare_scene":
             _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
             return result(production_commands.prepare_scene(projection, aliases))
@@ -611,6 +635,26 @@ SEMANTIC_TOOLS = [
             },
             "required": ["project", "scene", "goal"]
         },
+    },
+    {
+        "name": "start_production_run",
+        "description": "Create a durable Production Agent run from the current canonical scene plan. The queue persists in HAP SQLite and completion remains derived from canonical state.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "goal": {"type": "string"}, "target": {"type": "string", "enum": ["generate_ready", "handoff_ready", "stale_clear"]}, "actor": {"type": "string"}}, "required": ["project", "scene", "goal"]},
+    },
+    {
+        "name": "get_production_run",
+        "description": "Refresh a durable Production Agent run from current HAP state. Tasks disappear only when the canonical blocker is actually resolved.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"}, "actor": {"type": "string"}}, "required": ["project", "scene", "run_id"]},
+    },
+    {
+        "name": "claim_production_task",
+        "description": "Claim exactly the first executable Production Agent task for one worker. Later tasks cannot be claimed before the leading task resolves in canonical state.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"}, "actor": {"type": "string"}}, "required": ["project", "scene", "run_id"]},
+    },
+    {
+        "name": "control_production_run",
+        "description": "Pause, resume, cancel, release, fail, or explicitly retry a Production Agent task. It never marks creative work complete; canonical refresh decides that.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"}, "action": {"type": "string", "enum": ["pause", "resume", "cancel", "release_task", "fail_task", "retry_task"]}, "task_id": {"type": "string"}, "claim_token": {"type": "string"}, "error": {"type": "string"}, "actor": {"type": "string"}}, "required": ["project", "scene", "run_id", "action"]},
     },
     {
         "name": "prepare_scene",

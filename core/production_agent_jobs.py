@@ -149,7 +149,7 @@ def _sync_tasks(db, run_row, plan: dict[str, Any], actor: str):
     run_id = run_row["run_id"]
     now = hap_core.now()
     existing = db.execute("SELECT * FROM production_agent_tasks WHERE run_id=? ORDER BY ordinal,created_at", (run_id,)).fetchall()
-    active = {row["signature"]: row for row in existing if row["state"] not in {"COMPLETE", "FAILED"}}
+    active = {row["signature"]: row for row in existing if row["state"] != "COMPLETE"}
     desired = []
     for step in plan.get("steps") or []:
         signature = _task_signature(step)
@@ -180,7 +180,7 @@ def _sync_tasks(db, run_row, plan: dict[str, Any], actor: str):
             )
             _event(db, run_id, "task_queued", actor, {"ordinal": ordinal, "stage": step.get("stage"), "state": base_state}, task_id)
             continue
-        state = row["state"] if row["state"] == "CLAIMED" else base_state
+        state = row["state"] if row["state"] in {"CLAIMED", "FAILED"} else base_state
         db.execute(
             "UPDATE production_agent_tasks SET ordinal=?,stage=?,state=?,plan_status=?,action=?,suggested_tool=?,expected_revision_id=?,entity_ids_json=?,reasons_json=?,instruction=?,updated_at=? WHERE task_id=?",
             (
@@ -271,6 +271,9 @@ def refresh_run(root: Path, run_id: str, projection: dict[str, Any], scene_alias
         )
         _sync_tasks(db, run, plan, actor)
         state = _run_state(plan, paused=bool(run["paused"]), cancelled=bool(run["cancelled"]))
+        failed = db.execute("SELECT 1 FROM production_agent_tasks WHERE run_id=? AND state='FAILED' LIMIT 1", (run_id,)).fetchone()
+        if failed is not None and not run["paused"] and not run["cancelled"]:
+            state = "FAILED"
         now = hap_core.now()
         db.execute(
             "UPDATE production_agent_runs SET state=?,checkpoint=?,updated_at=? WHERE run_id=?",
@@ -300,20 +303,24 @@ def claim_next(root: Path, run_id: str, projection: dict[str, Any], scene_aliase
         if run["paused"] or run["cancelled"] or run["state"] != "READY":
             raise ValueError(f"E_PRODUCTION_AGENT_RUN_NOT_CLAIMABLE:{run['state']}")
         task = db.execute(
-            "SELECT * FROM production_agent_tasks WHERE run_id=? AND state='PENDING' ORDER BY ordinal,created_at LIMIT 1",
+            "SELECT * FROM production_agent_tasks WHERE run_id=? AND state NOT IN ('COMPLETE','FAILED') ORDER BY ordinal,created_at LIMIT 1",
             (run_id,),
         ).fetchone()
         if task is None:
             raise ValueError("E_PRODUCTION_AGENT_NO_CLAIMABLE_TASK")
+        if task["state"] == "CLAIMED":
+            raise ValueError("E_PRODUCTION_AGENT_TASK_ALREADY_CLAIMED")
+        if task["state"] != "PENDING":
+            raise ValueError(f"E_PRODUCTION_AGENT_TASK_NOT_CLAIMABLE:{task['state']}")
         if not task["suggested_tool"]:
             raise ValueError("E_PRODUCTION_AGENT_TASK_REQUIRES_MANUAL_ACTION")
         token = hap_core.new_id("agent_claim", f"{run_id}|{task['task_id']}|{actor}")
         now = hap_core.now()
-        db.execute(
+        cursor = db.execute(
             "UPDATE production_agent_tasks SET state='CLAIMED',claim_actor=?,claim_token=?,claim_checkpoint=?,claimed_at=?,updated_at=? WHERE task_id=? AND state='PENDING'",
             (actor, token, run["checkpoint"], now, now, task["task_id"]),
         )
-        if db.total_changes == 0:
+        if cursor.rowcount != 1:
             raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_RACE")
         _event(db, run_id, "task_claimed", actor, {"checkpoint": run["checkpoint"], "suggested_tool": task["suggested_tool"]}, task["task_id"])
         db.commit()
@@ -367,6 +374,19 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
             db.execute("UPDATE production_agent_tasks SET state='FAILED',last_error=?,updated_at=? WHERE task_id=?", (error or "task_failed", now, task_id))
             db.execute("UPDATE production_agent_runs SET state='FAILED',last_error=?,updated_at=? WHERE run_id=?", (error or "task_failed", now, run_id))
             _event(db, run_id, "task_failed", actor, {"error": error or "task_failed"}, task_id)
+        elif action == "retry_task":
+            if not task_id:
+                raise ValueError("E_PRODUCTION_AGENT_TASK_REQUIRED")
+            task = _task_row(db, run_id, task_id)
+            if task["state"] != "FAILED":
+                raise ValueError("E_PRODUCTION_AGENT_TASK_NOT_FAILED")
+            base = _base_task_state({"status": task["plan_status"]})
+            db.execute(
+                "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,last_error=NULL,updated_at=? WHERE task_id=?",
+                (base, now, task_id),
+            )
+            db.execute("UPDATE production_agent_runs SET state='READY',last_error=NULL,updated_at=? WHERE run_id=?", (now, run_id))
+            _event(db, run_id, "task_retry_requested", actor, {}, task_id)
         else:
             raise ValueError("E_PRODUCTION_AGENT_CONTROL_ACTION_INVALID")
         db.commit()

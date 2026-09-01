@@ -44,7 +44,11 @@ def run(payload):
             root, str(payload.get("run_id") or ""), projection, aliases, actor=str(payload.get("actor") or "filmmate-user")
         )
     if action == "latest_run":
-        latest = production_agent_jobs.latest_run(root, str(aliases[0]))
+        latest = None
+        for alias in aliases:
+            latest = production_agent_jobs.latest_run(root, str(alias))
+            if latest is not None:
+                break
         if latest is None:
             return None
         return production_agent_jobs.refresh_run(root, latest["run_id"], projection, aliases, actor=str(payload.get("actor") or "filmmate-user"))

@@ -199,18 +199,34 @@ ipcMain.handle("project:connect-codex-sources", async (_event, project) => {
   return await connectCodexSources(projectDir);
 });
 
-ipcMain.handle("production-agent:run", async (_event, project, scene, request = {}) => {
+function productionAgentPayload(project, scene, request = {}) {
   const projectDir = projectPaths.resolveHapProject(project);
   const {sceneDir} = projectPaths.resolveScene(project, scene);
   const manifest = readJson(path.join(sceneDir, "scene-data", "scene-manifest.json")) || {};
-  const aliases = [scene, sceneDir.name, manifest.scene_id].filter(Boolean);
-  return await pythonBridge.runProductionAgentAsync({
+  return {
     project_root: projectDir,
-    scene_aliases: aliases,
-    goal: request?.goal,
-    target: request?.target,
-    previous_checkpoint: request?.previous_checkpoint,
-  });
+    scene_aliases: [scene, sceneDir.name, manifest.scene_id].filter(Boolean),
+    ...request,
+  };
+}
+
+ipcMain.handle("production-agent:run", async (_event, project, scene, request = {}) => {
+  return await pythonBridge.runProductionAgentAsync(productionAgentPayload(project, scene, {
+    action:"plan",
+    goal:request?.goal,
+    target:request?.target,
+    previous_checkpoint:request?.previous_checkpoint,
+  }));
+});
+ipcMain.handle("production-agent:start-run", async (_event, project, scene, request = {}) => {
+  return await pythonBridge.runProductionAgentAsync(productionAgentPayload(project, scene, {...request, action:"start_run", actor:"filmmate-user"}));
+});
+ipcMain.handle("production-agent:get-run", async (_event, project, scene, runId) => {
+  const request = runId ? {action:"get_run", run_id:runId, actor:"filmmate-user"} : {action:"latest_run", actor:"filmmate-user"};
+  return await pythonBridge.runProductionAgentAsync(productionAgentPayload(project, scene, request));
+});
+ipcMain.handle("production-agent:control-run", async (_event, project, scene, request = {}) => {
+  return await pythonBridge.runProductionAgentAsync(productionAgentPayload(project, scene, {...request, action:"control_run", actor:"filmmate-user"}));
 });
 
 ipcMain.handle("project:delete", async (_event, project) => {
