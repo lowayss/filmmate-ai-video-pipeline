@@ -5,6 +5,7 @@ on:
     branches: [reinforcement-v8]
     paths:
       - ".filmmate/apply_reinforcement_v8.py"
+      - ".filmmate/fix_reinforcement_v8_contract.py"
       - ".github/workflows/apply-reinforcement-v8.yml"
       - "core/production_agent_jobs.py"
       - "core/production_agent_bridge.py"
@@ -26,6 +27,7 @@ jobs:
       - name: Apply durable Production Agent queue
         run: |
           python3 .filmmate/apply_reinforcement_v8.py
+          python3 .filmmate/fix_reinforcement_v8_contract.py
 
       - name: Verify Production Agent MCP registry
         run: |
@@ -63,10 +65,12 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           queue = Path("core/production_agent_jobs.py").read_text(encoding="utf-8")
+          main = Path("desktop/main.cjs").read_text(encoding="utf-8")
           ui = Path("desktop/index.html").read_text(encoding="utf-8")
           assert "task_resolved_from_canonical_state" in queue
           assert "E_PRODUCTION_AGENT_TASK_ALREADY_CLAIMED" in queue
           assert "retry_task" in queue
+          assert "previous_checkpoint" in main
           assert "실행 큐 만들기" in ui
           assert "mark_task_complete" not in queue
           print("durable queue safety contract: PASS")
@@ -75,6 +79,7 @@ jobs:
       - name: Commit applied reinforcement
         run: |
           rm -f .filmmate/apply_reinforcement_v8.py
+          rm -f .filmmate/fix_reinforcement_v8_contract.py
           rm -f .github/workflows/apply-reinforcement-v8.yml
           git config user.name "FilmMate CI"
           git config user.email "actions@users.noreply.github.com"
