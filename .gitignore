@@ -1,0 +1,47 @@
+# OS/editor noise
+.DS_Store
+.AppleDouble
+.LSOverride
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Generated project data and local runtime state
+packages/
+projects/
+.hap/
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+*.log
+
+# Node/Electron dependencies and generated builds
+desktop/node_modules/
+desktop/dist/
+desktop/out/
+node_modules/
+dist/
+build/
+
+# Local app backups and archives
+app-backup/
+rebuild_100x_v3.mjs
+*.app/
+*.dmg
+*.zip
+*.tar.gz

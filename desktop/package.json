@@ -1,0 +1,46 @@
+{
+  "name": "filmmate-desktop",
+  "productName": "FilmMate",
+  "version": "0.7.2",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "build:mac": "electron-builder --mac dir --arm64"
+  },
+  "build": {
+    "appId": "com.loways.filmmate",
+    "productName": "FilmMate",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "index.html",
+      "seedance-facs.js",
+      "prompt-languages.js",
+      "workspace-ui.css",
+      "workspace-ui.js",
+      "prompt-handoff.cjs",
+      "seedance-skill-binding.cjs",
+      "prompt-translation.cjs",
+      "prompt-job-client.cjs",
+      "micro-shot.css",
+      "micro-shot-ui.js",
+      "codex-worker.cjs",
+      "prompt-bundle.schema.json",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../core",
+        "to": "core"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.video"
+    }
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  }
+}

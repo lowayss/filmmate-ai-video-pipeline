@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FilmMate</title>
+<style>
+:root{--bg:#0c0e11;--side:#101318;--card:#171b20;--card2:#1d2229;--line:#2a3038;--text:#f5f6f7;--muted:#8c96a3;--lime:#b9ff55;--blue:#91a9ff;--danger:#ff8b8b}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px Inter,system-ui,sans-serif}button,input,textarea,select{font:inherit}.shell{height:100vh;display:grid;grid-template-columns:210px 1fr;grid-template-rows:64px 1fr}header{grid-column:1/-1;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#0b0d10}.brand{font-weight:900;font-size:21px;letter-spacing:-.04em}.brand span{color:var(--lime)}.actions{display:flex;gap:8px;align-items:center}.search,.btn,.project-select{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:9px;padding:10px 13px}.search{width:260px}.project-select{max-width:220px}.btn{cursor:pointer}.btn.primary{background:var(--lime);color:#10120d;border-color:var(--lime);font-weight:800}.btn.danger{color:var(--danger);border-color:#67383d}.btn.danger:hover{background:#32191e}.sidebar{background:var(--side);border-right:1px solid var(--line);padding:20px 12px}.side-label{font-size:10px;letter-spacing:.16em;color:#68727e;text-transform:uppercase;margin:13px 10px 8px}.nav{padding:11px 12px;border-radius:9px;color:var(--muted);cursor:pointer;margin:2px 0}.nav:hover,.nav.active{background:#20291a;color:var(--lime)}main{overflow:auto;padding:34px 42px}.topline{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:27px}.eyebrow{font-size:11px;letter-spacing:.15em;color:var(--muted);text-transform:uppercase;margin-bottom:8px}h1{font-size:34px;letter-spacing:-.055em;margin:0}h2{font-size:18px;margin:0}p.sub{color:var(--muted);margin:8px 0 0}.metrics{display:flex;gap:8px}.metric{min-width:90px;border:1px solid var(--line);background:var(--card);border-radius:11px;padding:11px 14px}.metric b{display:block;font-size:23px}.metric small{color:var(--muted)}.scene-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:13px}.scene-card{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:19px;cursor:pointer;transition:.15s}.scene-card:hover{border-color:#596631;transform:translateY(-1px)}.scene-head,.row{display:flex;align-items:center;justify-content:space-between;gap:12px}.sid{color:var(--lime);font-weight:900}.pill{border:1px solid var(--line);border-radius:30px;color:var(--muted);padding:5px 9px;font-size:11px}.scene-card h3{font-size:21px;margin:20px 0 5px}.muted{color:var(--muted)}.progress{height:5px;background:#292f36;border-radius:9px;margin:18px 0 11px;overflow:hidden}.progress i{display:block;height:100%;background:var(--lime)}.stage-row{display:flex;gap:6px;flex-wrap:wrap}.stage{font-size:10px;padding:5px 7px;border-radius:6px;border:1px solid var(--line);color:var(--muted)}.stage.done{color:var(--lime);border-color:#496628}.stage.plan{color:var(--blue);border-color:#4a5677}.stage.warn{color:var(--danger);border-color:#8c3f46}.scene-page{max-width:1440px;margin:auto}.back{border:0;background:none;color:var(--muted);padding:0;cursor:pointer;margin-bottom:18px}.back:hover{color:var(--text)}.scene-title{display:flex;align-items:flex-end;justify-content:space-between;gap:20px}.scene-tabs{display:flex;gap:3px;border-bottom:1px solid var(--line);margin:27px 0 24px;overflow:auto}.scene-tab{border:0;background:none;color:var(--muted);padding:12px 15px;cursor:pointer;white-space:nowrap}.scene-tab.active{color:var(--text);border-bottom:2px solid var(--lime)}.content{max-width:1160px}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.summary>div{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px}.summary small{display:block;color:var(--muted);margin-bottom:5px}.section-title{display:flex;align-items:end;justify-content:space-between;margin:30px 0 12px}.asset-grid,.image-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:13px}.media-card{display:block;padding:0;text-align:left;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;cursor:pointer}.media-card:hover{border-color:var(--lime)}.media-card img{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#f5f5f5}.media-copy{padding:12px}.media-copy strong{display:block}.media-copy small{color:var(--muted)}.list{display:grid;gap:8px}.list-item{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:13px}.list-item strong{display:block}.list-item small{display:block;color:var(--muted);margin-top:4px;line-height:1.5}.doc{white-space:pre-wrap;background:#101318;border:1px solid var(--line);border-radius:12px;padding:22px;font:13px/1.75 ui-monospace,monospace;max-height:65vh;overflow:auto}.empty{border:1px dashed var(--line);border-radius:12px;padding:70px;text-align:center;color:var(--muted);grid-column:1/-1}.notice{border:1px solid #6e552c;background:#211b12;border-radius:12px;padding:15px 17px;margin-bottom:18px;color:#ffd58a;line-height:1.55}.notice strong{display:block;color:#fff0c9;margin-bottom:4px}.modal-bg,.lightbox{position:fixed;inset:0;background:#000d;display:none;place-items:center;z-index:20}.modal{width:min(720px,calc(100vw - 40px));background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px}.modal label{display:block;color:var(--muted);font-size:11px;margin:13px 0 5px}.modal input,.modal textarea{width:100%;background:#0c0e11;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:11px}.modal textarea{height:250px;resize:vertical}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.lightbox{padding:30px;cursor:zoom-out}.lightbox img{max-width:94vw;max-height:90vh;object-fit:contain;background:white;border-radius:8px}.toast{display:none;position:fixed;right:24px;bottom:22px;background:var(--lime);color:#111;padding:12px 16px;border-radius:9px;font-weight:800;z-index:30}@media(max-width:900px){.shell{grid-template-columns:1fr}.sidebar{display:none}main{padding:25px}.summary{grid-template-columns:1fr 1fr}.metrics{display:none}.project-select{max-width:150px}}
+.ai-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field label{display:block;color:var(--muted);font-size:11px;margin-bottom:6px}.field select,.field textarea{width:100%;background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:11px}.field textarea{min-height:190px;resize:vertical}.slot{border:1px solid var(--line);background:#11151a;border-radius:13px;padding:14px;margin-top:10px}.slot-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}.slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:9px}.slot-item{position:relative;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:var(--text)}.slot-item.selected{border-color:var(--lime);box-shadow:0 0 0 1px var(--lime)}.slot-select{display:block;width:100%;border:0;background:none;color:var(--text);text-align:left;padding:0;cursor:pointer}.slot-item img{width:100%;aspect-ratio:16/9;object-fit:contain;background:#fff;display:block}.slot-item span{display:block;padding:8px 52px 8px 8px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.copy-mini{position:absolute;right:6px;bottom:5px;border:1px solid var(--line);background:#0d1014;color:var(--text);border-radius:6px;padding:4px 7px;font-size:10px;cursor:pointer}.copy-mini:hover{color:var(--lime);border-color:var(--lime)}.order-list{display:flex;gap:8px;overflow:auto;padding-bottom:6px}.order-chip{flex:0 0 170px;border:1px solid #47582d;background:#172015;border-radius:10px;padding:10px}.order-chip b{color:var(--lime);display:block;margin-bottom:4px}.export-bar{position:sticky;bottom:-34px;background:linear-gradient(transparent,#0c0e11 24%);padding:30px 0 4px;display:flex;justify-content:flex-end;gap:8px}@media(max-width:900px){.ai-toolbar{grid-template-columns:1fr}}
+.stage.warn{color:#ffbf69;border-color:#8c5a24}.notice{border:1px solid #6e552c;background:#211b12;border-radius:12px;padding:15px 17px;margin-bottom:18px;color:#ffd58a;line-height:1.55}.notice strong{display:block;color:#fff0c9;margin-bottom:4px}.canonical-gate{padding:28px}.canonical-gate code{color:var(--lime)}.btn:disabled{cursor:not-allowed;opacity:.42}
+.export-bar{align-items:center;flex-wrap:wrap}.action-menu{position:relative}.action-menu>summary{list-style:none}.action-menu>summary::-webkit-details-marker{display:none}.action-menu[open]>summary{border-color:var(--lime);color:var(--lime)}.action-menu-panel{position:absolute;right:0;bottom:calc(100% + 8px);z-index:12;min-width:230px;display:grid;gap:5px;padding:8px;background:var(--card2);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px #0009}.action-menu-panel .menu-action{border:1px solid transparent;background:transparent;color:var(--text);border-radius:7px;padding:9px 10px;text-align:left;cursor:pointer;white-space:nowrap}.action-menu-panel .menu-action:hover{background:#29321e;color:var(--lime)}
+.direction-card,.block-gate{border:1px solid var(--line);background:#11151a;border-radius:13px;padding:15px 16px;margin:14px 0}.direction-head,.gate-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.direction-head small,.gate-head small{display:block;color:var(--muted);margin-top:4px}.direction-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}.direction-item{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:10px}.direction-item b{display:block;color:var(--muted);font-size:10px;letter-spacing:.08em;margin-bottom:5px}.direction-item span{display:block;line-height:1.45}.direction-more{margin-top:10px;color:var(--muted)}.direction-more summary,.gate-details summary{cursor:pointer;color:var(--lime)}.direction-more pre{white-space:pre-wrap;color:var(--text);font:12px/1.6 ui-monospace,monospace}.gate-badge{display:inline-flex;align-items:center;border-radius:999px;padding:6px 10px;font-size:11px;font-weight:900;letter-spacing:.06em}.gate-badge.pass{background:#1d3517;color:var(--lime)}.gate-badge.warn{background:#3a2b13;color:#ffc66f}.gate-badge.fail{background:#3a1c22;color:#ff9aa5}.gate-issues{display:grid;gap:6px;margin-top:12px}.gate-row{display:grid;grid-template-columns:18px 150px 1fr;gap:8px;align-items:start;border-top:1px solid #252b32;padding-top:8px}.gate-row:first-child{border-top:0;padding-top:0}.gate-mark{font-weight:900}.gate-row.pass .gate-mark{color:var(--lime)}.gate-row.warn .gate-mark{color:#ffc66f}.gate-row.fail .gate-mark{color:#ff9aa5}.gate-row b{font-size:12px}.gate-row span:last-child{color:var(--muted);font-size:12px;line-height:1.45}.gate-details{margin-top:10px}.gate-details .gate-issues{margin-top:9px}@media(max-width:900px){.direction-grid{grid-template-columns:1fr}.gate-row{grid-template-columns:18px 1fr}.gate-row span:last-child{grid-column:2}}
+.skill-lock{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid #496628;background:#14200f;border-radius:12px;padding:12px 14px;margin:12px 0}.skill-lock.blocked{border-color:#7b3640;background:#271318}.skill-lock strong{display:block;color:var(--lime)}.skill-lock.blocked strong{color:#ff9aa5}.skill-lock small{display:block;color:var(--muted);margin-top:3px}.skill-hash{font:11px ui-monospace,monospace;color:var(--lime)}
+.prompt-count{color:var(--lime);font-weight:800;white-space:nowrap}
+.prompt-language-bar{display:flex;align-items:center;gap:9px;margin:0 0 9px;min-height:34px}.prompt-language-tabs{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#11151a}.prompt-language-tab{display:flex;align-items:center;gap:6px;border:0;border-right:1px solid var(--line);background:transparent;color:var(--muted);padding:8px 11px;cursor:pointer;font-size:12px}.prompt-language-tab:last-child{border-right:0}.prompt-language-tab.active{background:#243218;color:var(--text)}.prompt-language-tab:disabled{cursor:wait;opacity:.62}.prompt-language-tab i{width:6px;height:6px;border-radius:50%;background:#606a76}.prompt-language-tab.ready i{background:var(--lime)}.prompt-language-tab.loading i{background:#ffc66f;box-shadow:0 0 0 3px #ffc66f22}.prompt-language-tab.error i{background:var(--danger)}.prompt-translation-summary{color:var(--muted);font-size:11px;flex:1}.prompt-language-refresh{width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);cursor:pointer}.prompt-language-refresh:hover{border-color:var(--lime);color:var(--lime)}.prompt-language-refresh:disabled{opacity:.4;cursor:wait}@media(max-width:700px){.prompt-language-bar{align-items:stretch;flex-wrap:wrap}.prompt-translation-summary{flex-basis:calc(100% - 42px)}}
+</style>
+<link rel="stylesheet" href="workspace-ui.css">
+<link rel="stylesheet" href="micro-shot.css">
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="brand-block"><div class="brand">Film<span>Mate</span></div><small>AI FILM WORKSPACE</small></div>
+    <div class="header-center"><label for="projectSelect">현재 프로젝트</label><select id="projectSelect" class="project-select" aria-label="현재 프로젝트"></select></div>
+    <div class="actions"><input id="search" class="search" placeholder="씬 검색"><button id="refresh" class="btn icon-btn" title="프로젝트 새로고침" aria-label="프로젝트 새로고침">↻</button><details class="header-menu"><summary class="btn icon-btn" aria-label="프로젝트 메뉴">•••</summary><div class="header-menu-panel"><button id="deleteProject" class="menu-danger" disabled>현재 프로젝트를 휴지통으로 이동</button></div></details><button id="newProject" class="btn primary">+ 프로젝트</button></div>
+  </header>
+  <aside class="sidebar" id="nav"><div class="side-label">제작 관리</div><div class="nav active" data-view="board"><i>01</i><span>프로젝트 보드</span></div><div class="nav" data-view="assets"><i>02</i><span>에셋</span></div><div class="nav" data-view="storyboard"><i>03</i><span>스토리보드</span></div><div class="nav" data-view="ready"><i>04</i><span>AI 입력</span></div><div class="side-label">시스템</div><div class="nav" data-view="system"><i>✓</i><span>연결·검증</span><b class="nav-status"></b></div><div class="sidebar-foot"><span>FilmMate 0.7</span><small>양방향 리비전</small></div></aside>
+  <main id="main"><div class="empty">프로젝트를 불러오는 중입니다.</div></main>
+</div>
+<div id="modalBg" class="modal-bg"><div class="modal"><h2>새 프로젝트</h2><p class="sub">전체 시나리오를 넣으면 씬을 자동으로 나눕니다.</p><label>프로젝트명</label><input id="projectTitle" placeholder="100배 줌"><label>전체 시나리오</label><textarea id="projectScript" placeholder="## S#1. 주택가 옥상 / 늦은 오후"></textarea><div class="modal-actions"><button id="cancel" class="btn">취소</button><button id="create" class="btn primary">프로젝트 생성</button></div></div></div>
+<div id="lightbox" class="lightbox"><img id="lightboxImg" alt="미리보기"></div><div id="toast" class="toast"></div>
+<script>
+const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const stages={analysis:'분석',text_conti:'글 콘티',assets:'에셋',storyboard:'스토리보드',prompts:'프롬프트',qa:'QA'};
+let projects=[],project=null,view='board',selected=null,detail=null,sceneTab='overview',seedanceSkillPolicy={status:'LOADING',name:'seedance-prompt-rules'},aiDraft={model:'Seedance 2.0',unitType:'shot',targetId:'C01',items:[],uploads:[],prompt:'',combinedStoryboard:null,skillBundleSha256:null};
+let deletingProject=false;
+const sceneId=s=>s.path.split('/scenes/').pop(),hasReplacement=v=>String(v??'').includes('�'),safeProjectTitle=p=>hasReplacement(p?.title)?`${p.id.replace(/^PROJECT_/,'')} · 원문 인코딩 오류`:p?.title||p?.id||'제목 없음',safeSceneTitle=s=>hasReplacement(s?.title)?`${s.scene_id} · 원문 인코딩 오류`:s?.title||s?.scene_id,statusClass=v=>['ready','accepted','verified','connected'].includes(v)?'done':v==='planned'?'plan':v==='stale'||v==='blocked'||v==='invalid'||v==='changed'||v==='missing'?'warn':'';
+function chooseProject(list){const saved=localStorage.getItem('filmmate.project')||localStorage.getItem('filmmake.project');return list.find(p=>p.id===saved)||list.find(p=>!hasReplacement(p.title))||list[0]||null}
+function syncProjectSelect(){const select=$('projectSelect');select.innerHTML=projects.map(p=>`<option value="${esc(p.id)}" ${project?.id===p.id?'selected':''}>${esc(safeProjectTitle(p))}</option>`).join('');select.disabled=!projects.length;$('deleteProject').disabled=!project}
+async function load(){try{projects=await window.sceneFlow.projects();project=chooseProject(projects);if(project)localStorage.setItem('filmmate.project',project.id);selected=null;detail=null;syncProjectSelect();render()}catch(e){$('main').innerHTML='<div class="empty">'+esc(e.message)+'</div>'}}
+function render(){if(!project){$('main').innerHTML='<div class="empty">새 프로젝트를 만들어 시작하세요.</div>';return}selected?renderScene():renderIndex()}
+function pageHead(name,sub){return `<div class="topline"><div><div class="eyebrow">${esc(safeProjectTitle(project))}</div><h1>${esc(name)}</h1><p class="sub">${esc(sub)}</p></div><div class="metrics"><div class="metric"><b>${project.scenes.length}</b><small>SCENES</small></div><div class="metric"><b>${project.scenes.reduce((n,s)=>n+(s.shot_count||0),0)}</b><small>CUTS</small></div></div></div>`}
+function renderIndex(){const names={board:['프로젝트 보드','씬을 선택하면 전용 작업화면으로 이동합니다.'],assets:['에셋 라이브러리','씬별 캐릭터·배경·소품 자료를 확인합니다.'],storyboard:['스토리보드','씬별 승인 프레임을 전체 화면에서 확인합니다.'],ready:['AI 입력 준비','최종 패키지 상태를 확인합니다.'],system:['Codex 연결·검증','프로젝트가 참조하는 코덱스 스킬 폴더와 현재 상태를 확인합니다.']},[name,sub]=names[view]||names.board;if(view==='system'){renderSystem();return}const q=$('search').value.toLowerCase(),list=project.scenes.filter(s=>(safeSceneTitle(s)+' '+(s.location||'')).toLowerCase().includes(q));$('main').innerHTML=pageHead(name,sub)+`<div class="scene-grid">${list.map(sceneCard).join('')||'<div class="empty">검색 결과가 없습니다.</div>'}</div>`;document.querySelectorAll('[data-scene]').forEach(el=>el.onclick=()=>openScene(el.dataset.scene))}
+function sourceStatusClass(status){return status==='connected'?'done':status==='changed'||status==='missing'?'warn':'plan'}
+function renderSystem(){const links=project.source_links||[],required=links.filter(x=>x.required),ready=required.length>0&&required.every(x=>x.status==='connected');$('main').innerHTML=pageHead('Codex 연결·검증','FilmMate가 사용하는 코덱스 스킬 원본은 읽기 전용으로 연결됩니다.')+`<div class="notice"><strong>${ready?'핵심 스킬 연결 정상':'연결 점검이 필요합니다'}</strong>시합 → 콘합/미합 → 에셋·스토리보드 → 씨댄스 프롬프트의 기준 폴더를 프로젝트에 등록하고 해시로 변경 여부를 검사합니다. 스킬 폴더 자체는 FilmMate가 수정하지 않습니다.</div><div class="section-title"><h2>연결된 Codex 소스</h2><button class="btn primary" id="checkCodex">연결·점검 실행</button></div><div class="list">${links.map(x=>`<div class="list-item"><div class="row"><strong>${esc(x.label)}</strong><span class="stage ${sourceStatusClass(x.status)}">${esc(x.status||'미확인')}${x.required?' · 필수':''}</span></div><small>${esc(x.path)}<br>${esc(x.metadata?.file_count??0)}개 파일 · 마지막 점검 ${esc(x.checked_at||'없음')}</small></div>`).join('')||'<div class="empty">아직 연결된 Codex 소스가 없습니다. 연결·점검을 실행하세요.</div>'}</div><div class="section-title"><h2>정본 상태</h2></div><div class="list-item"><strong style="color:var(--lime)">HAP v2 · SQLite + CAS</strong><small>프로젝트 산출물·리비전·의존성·QA·승인은 HAP 정본으로 관리하고, 이 화면은 그 읽기 전용 투영을 보여줍니다.</small></div>`;$('checkCodex').onclick=async()=>{try{await window.sceneFlow.connectCodexSources(project.id);toast('Codex 소스 연결·점검 완료');await load();view='system';renderIndex()}catch(e){toast('Codex 연결 실패: '+e.message)}}}
+function sceneCard(s){let note=view==='assets'?`에셋 ${s.pipeline?.assets||'pending'}`:view==='storyboard'?`스토리보드 ${s.pipeline?.storyboard||'pending'}`:view==='ready'?`패키지 ${s.pipeline?.package||'pending'}`:`${s.shot_count||0}컷 · ${s.block_count||0}블록`;return `<article class="scene-card" data-scene="${esc(s.scene_id)}"><div class="scene-head"><span class="sid">${esc(s.scene_id)}</span><span class="pill">${esc(s.scene_duration||'—')}</span></div><h3>${esc(safeSceneTitle(s))}</h3><div class="muted">${esc(hasReplacement(s.location)?'원문 인코딩 오류':s.location||'장소 미확정')} · ${esc(hasReplacement(s.time)?'원문 인코딩 오류':s.time||'시간 미확정')}</div><div class="progress"><i style="width:${s.progress||0}%"></i></div><div class="row"><div class="stage-row">${Object.entries(stages).slice(0,4).map(([k,l])=>`<span class="stage ${statusClass(s.pipeline?.[k])}">${l}</span>`).join('')}</div><span class="muted">${esc(note)} →</span></div></article>`}
+async function loadSeedanceSkillPolicy(){try{return await window.sceneFlow.seedanceSkillPolicy()}catch(e){return{status:'BLOCKED',name:'seedance-prompt-rules',error:e.message,missing_files:[],rule_checks:[]}}}
+async function openScene(id){selected=project.scenes.find(s=>s.scene_id===id);sceneTab=view==='assets'?'assets':view==='storyboard'?'storyboard':view==='ready'?'ready':'overview';try{const loaded=await Promise.all([window.sceneFlow.sceneDetail(selected.project,sceneId(selected)),loadSeedanceSkillPolicy()]);detail=loaded[0];seedanceSkillPolicy=loaded[1];const first=detail?.conhap?.shots?.[0]?.id||'C01';aiDraft={model:'Seedance 2.0',unitType:'shot',targetId:first,items:[],uploads:[],prompt:'',combinedStoryboard:null,skillBundleSha256:null};syncTargetPackage();render()}catch(e){toast('씬을 열지 못했습니다: '+e.message)}}
+function renderScene(){const s=selected,tabs=[['overview','개요'],['analysis','원문'],['conti','글 콘티'],['assets','에셋'],['storyboard','스토리보드'],['ready','AI 입력']];$('main').innerHTML=`<div class="scene-page"><button class="back" id="back">← ${esc(view==='board'?'프로젝트 보드':view==='assets'?'에셋 라이브러리':view==='storyboard'?'스토리보드':'목록')}</button><div class="scene-title"><div><div class="eyebrow">${esc(s.scene_id)} / ${esc(safeProjectTitle(project))}</div><h1>${esc(safeSceneTitle(s))}</h1><p class="sub">${esc(hasReplacement(s.location)?'원문 인코딩 오류':s.location||'미확정')} · ${esc(hasReplacement(s.time)?'원문 인코딩 오류':s.time||'미확정')} · ${esc(s.scene_duration||'')}</p></div><span class="pill">${esc(detail?.conhap?.textContiVersion||detail?.manifest?.conhap?.text_conti_version||detail?.manifest?.conhap?.approval||'')}</span></div><div class="scene-tabs">${tabs.map(([k,l])=>`<button class="scene-tab ${sceneTab===k?'active':''}" data-tab="${k}">${l}</button>`).join('')}</div><div class="content">${sceneContent()}</div></div>`;$('back').onclick=()=>{selected=null;detail=null;render()};document.querySelectorAll('[data-tab]').forEach(x=>x.onclick=()=>{sceneTab=x.dataset.tab;renderScene()});bindMedia();if(sceneTab==='assets')bindAssetFolder();if(sceneTab==='ready')bindAiControls()}
+function sceneContent(){const s=selected,b=detail?.breakdown||s.breakdown||{};if(sceneTab==='overview')return `<div class="summary"><div><small>컷</small>${b.shot_count||s.shot_count||0}</div><div><small>등록 파일</small>${detail?.files?.length||0}</div><div><small>에셋</small>${s.pipeline?.assets||'pending'}</div><div><small>스토리보드</small>${s.pipeline?.storyboard||'pending'}</div></div><div class="section-title"><h2>제작 단계</h2></div><div class="list">${Object.entries(stages).map(([k,l])=>`<div class="list-item row"><strong>${l}</strong><span class="stage ${statusClass(s.pipeline?.[k])}">${esc(s.pipeline?.[k]||'pending')}</span></div>`).join('')}</div>`;if(sceneTab==='analysis')return `<div class="doc">${esc(detail?.sourceText||'원문 없음')}</div>`;if(sceneTab==='conti')return `<div class="doc">${esc(detail?.conhap?.textConti||'글 콘티 없음')}</div>`;if(sceneTab==='assets')return assetView();if(sceneTab==='storyboard')return storyboardView();return readyView()}
+function activeConhapDir(){return detail?.conhap?.dir||'conhap'}
+function assetView(){const plan=detail?.assetPlan?.assets||[],prefix=activeConhapDir()+'/reference-sheets/',generated=(detail?.files||[]).filter(x=>x.relativePath.startsWith(prefix)&&/\.(png|jpe?g|webp)$/i.test(x.name)),registered=(detail?.artifacts||[]).filter(x=>x.url&&/\.(png|jpe?g|webp)$/i.test(x.source_name||x.file||'')&&!String(x.role||'').includes('storyboard')),imgs=[...generated.map(x=>({url:x.url,source_name:x.name,role:x.relativePath.replace(prefix,'')})),...registered];return `<div class="section-title"><div><h2>등록된 이미지</h2><span class="muted">${imgs.length}개</span></div><button class="btn" id="openAssetFolder">사용자 에셋 폴더 열기</button></div><div class="asset-grid">${imgs.map(mediaCard).join('')||'<div class="empty">등록된 에셋 이미지가 없습니다.</div>'}</div><div class="section-title"><h2>미생성·계획 에셋</h2><span class="muted">${plan.length}개</span></div><div class="list">${plan.map(x=>`<div class="list-item"><strong>${esc(x.name)}</strong><small>${esc(x.type)} · ${esc(x.state||'미생성')}<br>${esc(x.reason||'')}</small></div>`).join('')||'<div class="empty">에셋 계획이 없습니다.</div>'}</div>`}
+function storyboardView(){const frames=(detail?.files||[]).filter(x=>x.relativePath.startsWith(activeConhapDir()+'/frames/')&&/\.(png|jpe?g|webp)$/i.test(x.name)).sort((a,b)=>a.name.localeCompare(b.name));return `<div class="section-title"><h2>승인 스토리보드</h2><span class="muted">${frames.length}컷 · 클릭해서 확대</span></div><div class="image-grid">${frames.map(x=>mediaCard({url:x.url,source_name:x.name,role:'approved frame'})).join('')||'<div class="empty">생성된 스토리보드가 없습니다.</div>'}</div>`}
+function mediaCard(x){return `<button class="media-card" data-image="${esc(x.url)}"><img src="${esc(x.url)}" alt="${esc(x.source_name||x.file)}"><span class="media-copy"><strong>${esc((x.source_name||x.logical_id||x.file||'').replace(/\.[^.]+$/,''))}</strong><small>${esc(x.role||'image')} · v${esc(x.version||1)}</small></span></button>`}
+function modelBlockDurationSec(){return aiDraft.model==='Seedance 2.5'?30:15}
+function finiteSec(value){const n=Number(value);return Number.isFinite(n)?n:null}
+function conhapBlockPlan(){
+  const raw=detail?.conhap?.blocks||[];
+  let cursor=0;
+  return raw.map((x,index)=>{
+    const start=finiteSec(x.start_sec)??cursor;
+    const explicitEnd=finiteSec(x.end_sec);
+    const duration=finiteSec(x.duration_sec)??(explicitEnd===null?15:Math.max(0,explicitEnd-start));
+    const end=explicitEnd??(start+Math.max(0,duration));
+    cursor=Math.max(cursor,end);
+    const shotIds=[...new Set(x.shot_ids||x.cut_ids||[])];
+    return {...x,block_id:x.block_id||x.id||`BLK${String(index+1).padStart(2,'0')}`,start_sec:start,end_sec:end,duration_sec:end-start,shot_ids:shotIds};
+  });
+}
+function sourceBlockShotRoles(blocks){
+  const owner=new Map();
+  blocks.forEach(block=>(block.shot_ids||[]).forEach(id=>{if(!owner.has(id))owner.set(id,block.block_id)}));
+  return blocks.map(block=>{
+    const primary_shot_ids=(block.shot_ids||[]).filter(id=>owner.get(id)===block.block_id);
+    return {...block,primary_shot_ids,continuity_shot_ids:(block.shot_ids||[]).filter(id=>owner.get(id)!==block.block_id)};
+  });
+}
+function legacyAiBlocks(){
+  const sourceBlocks=conhapBlockPlan();
+  if(sourceBlocks.length)return sourceBlockShotRoles(sourceBlocks).map(x=>({...x,source_block_ids:[x.block_id],source_blocks:[{block_id:x.block_id,start_sec:x.start_sec,end_sec:x.end_sec,duration_sec:x.duration_sec,shot_ids:x.shot_ids||[],primary_shot_ids:x.primary_shot_ids||x.shot_ids||[],continuity_shot_ids:x.continuity_shot_ids||[],start_state:x.start_state,main_action:x.main_action,end_state:x.end_state}]}));
+  const timed=timedShotSchedule(),blocks=[];
+  const sceneEnd=timed.at(-1)?.end||0;
+  for(let start=0,index=1;start<sceneEnd;start+=15){
+    const end=Math.min(start+15,sceneEnd),shotIds=timed.filter(x=>x.start<end&&x.end>start).map(x=>x.id);
+    blocks.push({block_id:`B${String(index++).padStart(2,'0')}`,start_sec:start,end_sec:end,duration_sec:end-start,shot_ids:shotIds,primary_shot_ids:shotIds,continuity_shot_ids:[],source_block_ids:[]});
+  }
+  return blocks;
+}
+function seedance25Blocks(){
+  const base=legacyAiBlocks(),validShots=new Set((detail?.conhap?.shots||[]).map(x=>x.id));
+  const sceneEnd=Math.max(30,...base.map(x=>finiteSec(x.end_sec)??((finiteSec(x.start_sec)||0)+(finiteSec(x.duration_sec)||15))));
+  const blocks=[];
+  for(let start=0,index=1;start<sceneEnd;start+=30){
+    const end=Math.min(start+30,sceneEnd),overlaps=base.filter(x=>(finiteSec(x.start_sec)||0)<end&&(finiteSec(x.end_sec)??((finiteSec(x.start_sec)||0)+(finiteSec(x.duration_sec)||15)))>start);
+    const shotIds=[...new Set(overlaps.flatMap(x=>x.shot_ids||[]))].filter(id=>validShots.has(id));
+    const primaryIds=[...new Set(overlaps.flatMap(x=>x.primary_shot_ids||x.shot_ids||[]))].filter(id=>validShots.has(id));
+    const continuityIds=shotIds.filter(id=>!primaryIds.includes(id));
+    blocks.push({
+      block_id:`SD25_B${String(index++).padStart(2,'0')}`,
+      start_sec:start,end_sec:end,duration_sec:end-start,shot_ids:shotIds,
+      primary_shot_ids:primaryIds,continuity_shot_ids:continuityIds,
+      source_block_ids:overlaps.map(x=>x.block_id||x.id),
+      source_blocks:overlaps.map(x=>({block_id:x.block_id||x.id,start_sec:x.start_sec,end_sec:x.end_sec,duration_sec:x.duration_sec,shot_ids:x.shot_ids||[],primary_shot_ids:x.primary_shot_ids||x.shot_ids||[],continuity_shot_ids:x.continuity_shot_ids||[],start_state:x.start_state,main_action:x.main_action,end_state:x.end_state}))
+    });
+  }
+  return blocks;
+}
+function aiBlocks(){return aiDraft.model==='Seedance 2.5'?seedance25Blocks():legacyAiBlocks()}
+function currentShotIds(){if(aiDraft.unitType==='shot')return [aiDraft.targetId];const block=aiBlocks().find(x=>(x.block_id||x.id)===aiDraft.targetId);return block?.shot_ids||[]}
+function assetUsage(a){return a.used_in||detail?.assetPlan?.assets?.find(x=>x.asset_id===a.logical_id)?.used_in||[]}
+function artifactRole(a){if(String(a.role).includes('character'))return'character';if(/background|location/.test(String(a.role)))return'background';if(/prop|ui_reference|camera_plate/.test(String(a.role)))return'prop';return''}
+function orderedAiItems(){const order={storyboard:0,character:1,background:2,prop:3};return [...aiDraft.items].sort((a,b)=>(order[a.role]-order[b.role])||((a.sequence??999)-(b.sequence??999)))}
+function packageDisplayItems(){const ordered=orderedAiItems();if(aiDraft.unitType!=='block'||!aiDraft.combinedStoryboard)return ordered;const boards=ordered.filter(x=>x.role==='storyboard');return boards.length?[{...aiDraft.combinedStoryboard,role:'storyboard',name:`${aiDraft.targetId} 스토리보드 합본 (${boards.length}컷)`,combined:true},...ordered.filter(x=>x.role!=='storyboard')]:ordered}
+function timedShotSchedule(){
+  const shots=detail?.conhap?.shots||[],text=detail?.conhap?.textConti||'',durations={};
+  for(const m of text.matchAll(/^(?:###|##)\s+(C\d+)(?:\s*[—·]\s*)?(\d+(?:\.\d+)?)초/gm))durations[m[1]]=Number(m[2]);
+  let cursor=0;
+  return shots.map(x=>{
+    const explicitStart=finiteSec(x.start_sec),explicitEnd=finiteSec(x.end_sec),explicitDuration=finiteSec(x.duration_sec),fallbackDuration=durations[x.id]||5;
+    const start=explicitStart??cursor;
+    const end=explicitEnd??(start+(explicitDuration??fallbackDuration));
+    const safeEnd=end>start?end:start+fallbackDuration;
+    cursor=Math.max(cursor,safeEnd);
+    return {...x,start,end:safeEnd,duration:safeEnd-start,timing_source:(explicitStart!==null&&(explicitEnd!==null||explicitDuration!==null))?'explicit':'derived'};
+  });
+}
+function buildAiPrompt(){const refs=packageDisplayItems().map((x,i)=>`@Image ${i+1}: ${x.role==='storyboard'?'storyboard composition and shot-order control':x.role+' continuity reference'} (${x.name})`).join('\n'),schedule=timedShotSchedule(),targetBlock=aiDraft.unitType==='block'?aiBlocks().find(x=>x.block_id===aiDraft.targetId):null,blockStart=targetBlock?.start_sec||0,blockEnd=targetBlock?.end_sec??Infinity,segments=schedule.filter(x=>aiDraft.unitType==='shot'?x.id===aiDraft.targetId:x.start<blockEnd&&x.end>blockStart),duration=aiDraft.unitType==='block'?(targetBlock?.duration_sec||15):(segments[0]?.duration||5),beats=segments.map(x=>{const start=aiDraft.unitType==='block'?Math.max(0,x.start-blockStart):0,end=aiDraft.unitType==='block'?Math.min(duration,x.end-blockStart):x.duration,dialogue=x.audio?.dialogue&&x.audio.dialogue!=='none'?` Exact Korean dialogue: “${x.audio.dialogue}” Preserve wording, pacing and order.`:' No dialogue.';return `[${start.toFixed(1)}s–${end.toFixed(1)}s] ${x.id} — ${x.screen?.subject_action||x.shot_intent}. Visual result: ${x.new_information}. Camera result: ${x.camera?.shot_size||''}, ${x.camera?.view_angle||''}, ${x.camera?.movement||'locked'}, ${x.camera?.lens_result||''}. Screen direction: ${x.camera?.screen_direction||'neutral'}.${dialogue} Sound: ${x.audio?.sound||'natural ambience'}. Silence rule: ${x.audio?.silence||'none'}.`}).join('\n\n');return `${aiDraft.model} VIDEO PROMPT — ${aiDraft.targetId} — ${duration} seconds — 16:9\n\nREFERENCE ROLES\n${refs}\n\nTIMED PERFORMANCE AND CAMERA\n${beats}\n\nCONTINUITY LOCKS\nPreserve exact character identities, wardrobe, location geography, prop design, eyelines, screen direction, hand ownership and every start/end action state from the references. Keep actions continuous across cuts. Use only the exact Korean dialogue written above; do not paraphrase, translate, add lines or create voice-over. Natural sync and restrained acting, no subtitles, captions, logos, watermark or invented people and objects. Finish on the exact state described by the final timed segment.`}
+function syncTargetPackage(){aiDraft.items=[];aiDraft.uploads=[];aiDraft.combinedStoryboard=null;const ids=currentShotIds(),files=detail?.files||[],dir=activeConhapDir();ids.forEach((id,sequence)=>{const x=files.find(f=>f.relativePath===`${dir}/frames/${id}.png`);if(x)aiDraft.items.push({role:'storyboard',name:x.name,absolutePath:x.absolutePath,url:x.url,sequence})});(detail?.artifacts||[]).forEach(a=>{const role=artifactRole(a),used=assetUsage(a);if(role&&used.some(id=>ids.includes(id)))aiDraft.items.push({role,name:a.source_name,absolutePath:a.absolutePath,url:a.url})});aiDraft.prompt=buildAiPrompt()}
+async function ensureCombinedStoryboard(){if(aiDraft.unitType!=='block')return null;if(aiDraft.combinedStoryboard)return aiDraft.combinedStoryboard;const blockId=aiDraft.targetId,boards=orderedAiItems().filter(x=>x.role==='storyboard');if(!boards.length)return null;const images=await Promise.all(boards.map(x=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=x.url}))),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');canvas.width=1920;canvas.height=1080;ctx.fillStyle='#0a0a0a';ctx.fillRect(0,0,1920,1080);const gap=6,panelW=(1920-gap*(images.length+1))/images.length;images.forEach((img,i)=>{const maxW=panelW,maxH=1080-gap*2,scale=Math.min(maxW/img.naturalWidth,maxH/img.naturalHeight),w=img.naturalWidth*scale,h=img.naturalHeight*scale,x=gap+i*(panelW+gap)+(panelW-w)/2,y=(1080-h)/2;ctx.drawImage(img,x,y,w,h)});const out=await window.sceneFlow.saveBlockStoryboard(selected.project,sceneId(selected),blockId,canvas.toDataURL('image/png'));if(aiDraft.unitType==='block'&&aiDraft.targetId===blockId)aiDraft.combinedStoryboard=out;return out}
+function promptLibraryView(canonical){const shots=detail?.conhap?.shots||[],blocks=aiBlocks(),targets=aiDraft.unitType==='block'?blocks:shots,groups=aiCandidates(),roles=[['storyboard','스토리보드'],['character','캐릭터'],['background','배경'],['prop','소품']],ordered=packageDisplayItems(),shotIds=currentShotIds(),canPreview=ordered.length>0,blockTarget=aiDraft.unitType==='block',saveDisabled=blockTarget&&canPreview?'':'disabled';return `<div class="notice"><strong>${canonical?'HAP v2 작업용 블록 라이브러리':'레거시 증거 모드'}</strong>${canonical?'블록별 이미지와 프롬프트를 작업용 프리뷰 폴더에 저장합니다. HAP 정본·QA·승인 상태는 변경하지 않습니다.':'기존 파일을 확인하기 위한 프리뷰입니다. 여기서 만든 결과는 QA 승인이나 릴리스 준비 완료를 뜻하지 않습니다.'}</div><div class="ai-toolbar"><div class="field"><label>생성 모델</label><select id="aiModel"><option ${aiDraft.model==='Seedance 2.0'?'selected':''}>Seedance 2.0</option><option ${aiDraft.model==='Higgsfield'?'selected':''}>Higgsfield</option><option ${aiDraft.model==='Runway'?'selected':''}>Runway</option></select></div><div class="field"><label>패키지 단위</label><select id="aiUnit"><option value="shot" ${aiDraft.unitType==='shot'?'selected':''}>개별 컷</option><option value="block" ${aiDraft.unitType==='block'?'selected':''}>15초 블록</option></select></div><div class="field"><label>${blockTarget?'대상 15초 블록':'대상 컷'}</label><select id="aiTarget">${targets.map(x=>{const id=x.block_id||x.id,label=aiDraft.unitType==='block'?`${id} · ${x.start_sec}s–${x.end_sec}s · ${(x.shot_ids||[]).join(' → ')}`:`${id} · ${x.shot_intent||''}`;return `<option value="${esc(id)}" ${aiDraft.targetId===id?'selected':''}>${esc(label)}</option>`}).join('')}</select></div><div class="field"><label>포함 컷</label><div class="list-item">${shotIds.map(x=>`<span class="pill">${esc(x)}</span>`).join(' ')||'없음'}</div></div></div>${roles.map(([role,label])=>slotView(role,label,groups[role]||[])).join('')}<div class="section-title"><h2>업로드 순서</h2><span class="muted">${blockTarget?'블록 폴더에 이 순서와 파일을 함께 저장합니다. ':''}스토리보드 → 캐릭터 → 배경 → 소품</span></div><div class="order-list">${ordered.map((x,i)=>`<div class="order-chip"><b>@Image ${i+1}</b>${esc(x.role)}<br><small>${esc(x.name)}</small></div>`).join('')||'<span class="muted">슬롯에서 이미지를 선택하세요.</span>'}</div><div class="section-title"><h2>영상 프롬프트</h2><span class="muted">${canonical?'블록 라이브러리 프리뷰 · 직접 수정 가능':'레거시 프리뷰 · 직접 수정 가능'} · ${esc(aiDraft.model)} · ${esc(aiDraft.targetId)}</span></div><div class="field"><textarea id="aiPrompt" placeholder="시작 화면, 행동, 카메라, 끝 화면을 입력하세요.">${esc(aiDraft.prompt)}</textarea></div><div class="export-bar">${blockTarget&&!canonical?'<button class="btn" id="copyCombined">합본 생성·복사</button>':''}<button class="btn" id="copyPrompt">프롬프트 복사</button>${blockTarget?`<button class="btn" id="openBlockLibrary">최근 블록 라이브러리 Finder 열기</button><button class="btn primary" id="saveBlockLibrary" ${saveDisabled}>블록 라이브러리 저장·Finder 열기</button>`:''}${!canonical?`<button class="btn primary" id="exportPackage" ${canPreview?'':'disabled'}>레거시 프리뷰 만들기</button>`:''}</div>`}
+function readyView(){return promptLibraryView(selected?.state_source==='hap-v2')}
+function aiCandidates(){const files=detail?.files||[],arts=detail?.artifacts||[],library=Array.isArray(detail?.assetLibrary?.files)?detail.assetLibrary.files:[],dir=activeConhapDir(),frameIds=currentShotIds(),individualBoards=frameIds.flatMap((id,sequence)=>files.filter(x=>x.relativePath===`${dir}/frames/${id}.png`).map(x=>({role:'storyboard',name:x.name,absolutePath:x.absolutePath,url:x.url,sequence}))),storyboard=aiDraft.unitType==='block'?(aiDraft.combinedStoryboard?[{...aiDraft.combinedStoryboard,role:'storyboard',combined:true}]:individualBoards):individualBoards,refs=(library.length?library:files.filter(x=>x.relativePath.startsWith(`${dir}/reference-sheets/`)&&/\.(png|jpe?g|webp)$/i.test(x.name)).map(x=>({...x,path:x.relativePath}))).map(x=>({name:x.name,absolutePath:x.absolutePath,url:x.url,path:x.path||`/${x.relativePath}`})),uploads=aiDraft.uploads||[],picked=role=>uploads.filter(x=>x.role===role);return {storyboard:[...storyboard,...picked('storyboard')],character:[...arts.filter(x=>String(x.role).includes('character')).map(x=>({role:'character',name:x.source_name,absolutePath:x.absolutePath,url:x.url})),...refs.filter(x=>x.path.includes('/characters/')).map(x=>({...x,role:'character'})),...picked('character')],background:[...arts.filter(x=>/background|location/.test(String(x.role))).map(x=>({role:'background',name:x.source_name,absolutePath:x.absolutePath,url:x.url})),...refs.filter(x=>x.path.includes('/backgrounds/')).map(x=>({...x,role:'background'})),...picked('background')],prop:[...arts.filter(x=>/prop/.test(String(x.role))).map(x=>({role:'prop',name:x.source_name,absolutePath:x.absolutePath,url:x.url})),...refs.filter(x=>x.path.includes('/props/')).map(x=>({...x,role:'prop'})),...picked('prop')]}}
+function slotView(role,label,items){return `<section class="slot"><div class="slot-head"><div><strong>${label}</strong> <span class="muted">${items.length}개</span></div><div class="row">${role==='storyboard'&&aiDraft.unitType==='block'?'<span class="pill">블록 컷 묶음</span>':''}<button class="btn" data-pick="${role}">+ 이미지 추가</button></div></div><div class="slot-grid">${items.map(x=>x.combined?`<div class="slot-item selected"><div class="slot-select"><img src="${esc(x.url)}"><span>${esc(aiDraft.targetId)} 스토리보드 합본 · ${currentShotIds().join(' → ')}</span></div><button class="copy-mini" data-copy-image="${esc(x.absolutePath)}">복사</button></div>`:`<div class="slot-item ${aiDraft.items.some(y=>y.absolutePath===x.absolutePath)?'selected':''}"><button class="slot-select" data-toggle="${esc(x.absolutePath)}" data-role="${role}" data-name="${esc(x.name)}" data-url="${esc(x.url)}"><img src="${esc(x.url)}"><span>${esc(x.name)}</span></button><button class="copy-mini" data-copy-image="${esc(x.absolutePath)}">복사</button></div>`).join('')||'<span class="muted">등록된 이미지가 없습니다. 추가 버튼으로 넣으세요.</span>'}</div></section>`}
+function bindAiControls(){$('aiModel').onchange=e=>{aiDraft.model=e.target.value;aiDraft.prompt=buildAiPrompt();renderScene()};$('aiUnit').onchange=async e=>{aiDraft.unitType=e.target.value;const targets=aiDraft.unitType==='block'?aiBlocks():(detail?.conhap?.shots||[]);aiDraft.targetId=(targets[0]?.block_id||targets[0]?.id||'');syncTargetPackage();renderScene();if(aiDraft.unitType==='block'){await ensureCombinedStoryboard();renderScene()}};$('aiTarget').onchange=async e=>{aiDraft.targetId=e.target.value;syncTargetPackage();renderScene();if(aiDraft.unitType==='block'){await ensureCombinedStoryboard();renderScene()}};document.querySelectorAll('[data-toggle]').forEach(x=>x.onclick=()=>{const p=x.dataset.toggle,i=aiDraft.items.findIndex(y=>y.absolutePath===p);if(i>=0)aiDraft.items.splice(i,1);else{const candidate=Object.values(aiCandidates()).flat().find(y=>y.absolutePath===p)||{};aiDraft.items.push({role:x.dataset.role,name:x.dataset.name,absolutePath:p,url:x.dataset.url,sequence:candidate.sequence})}aiDraft.prompt=buildAiPrompt();renderScene()});document.querySelectorAll('[data-copy-image]').forEach(x=>x.onclick=async e=>{e.stopPropagation();try{await window.sceneFlow.copyImage(x.dataset.copyImage);toast('이미지를 클립보드에 복사했습니다')}catch(err){toast('이미지 복사 실패: '+err.message)}});document.querySelectorAll('[data-pick]').forEach(x=>x.onclick=async()=>{try{await window.sceneFlow.pickImages(selected.project,sceneId(selected),x.dataset.pick+'_reference');detail=await window.sceneFlow.sceneDetail(selected.project,sceneId(selected));renderScene()}catch(e){toast('이미지 추가 실패: '+e.message)}});$('aiPrompt').oninput=e=>aiDraft.prompt=e.target.value;$('copyPrompt').onclick=async()=>{await navigator.clipboard.writeText(aiDraft.prompt);toast('프롬프트를 복사했습니다')};if($('copyCombined'))$('copyCombined').onclick=async()=>{try{const out=await ensureCombinedStoryboard();if(!out){toast('합칠 스토리보드가 없습니다');return}await window.sceneFlow.copyImage(out.absolutePath);toast('블록 스토리보드 합본을 복사했습니다')}catch(e){toast('합본 생성 실패: '+e.message)}};$('exportPackage').onclick=async()=>{if(!aiDraft.items.length){toast('최소 한 장의 이미지를 선택하세요');return}try{const out=await window.sceneFlow.exportAiPackage(selected.project,sceneId(selected),{...aiDraft,shotIds:currentShotIds()});toast(`${aiDraft.unitType==='block'?'블록':'컷'} 패키지 v${String(out.version).padStart(3,'0')} 생성 완료`)}catch(e){toast('패키지 생성 실패: '+e.message)}}}
+function bindBlockLibraryActions(){const canonical=selected?.state_source==='hap-v2';if(canonical){if(!$('exportPackage')){const phantom=document.createElement('button');phantom.id='exportPackage';phantom.style.display='none';document.body.appendChild(phantom)}$('aiUnit').onchange=async e=>{aiDraft.unitType=e.target.value;const targets=aiDraft.unitType==='block'?aiBlocks():(detail?.conhap?.shots||[]);aiDraft.targetId=(targets[0]?.block_id||targets[0]?.id||'');syncTargetPackage();renderScene()};$('aiTarget').onchange=async e=>{aiDraft.targetId=e.target.value;syncTargetPackage();renderScene()};document.querySelectorAll('[data-pick]').forEach(x=>x.onclick=async()=>{try{const picked=await window.sceneFlow.pickPreviewImages(selected.project,sceneId(selected),x.dataset.pick);aiDraft.uploads=[...(aiDraft.uploads||[]),...picked];aiDraft.items.push(...picked.map(item=>({...item,sequence:999})));aiDraft.prompt=buildAiPrompt();renderScene()}catch(e){toast('이미지 추가 실패: '+e.message)}})}if($('openBlockLibrary'))$('openBlockLibrary').onclick=async()=>{try{const out=await window.sceneFlow.openBlockLibrary(selected.project,sceneId(selected),aiDraft.targetId,aiDraft.model);toast(out.version?`블록 라이브러리 ${out.version}을 Finder에서 열었습니다`:'블록 라이브러리 폴더를 Finder에서 열었습니다')}catch(e){toast('블록 라이브러리 열기 실패: '+e.message)}};if($('saveBlockLibrary'))$('saveBlockLibrary').onclick=async()=>{if(aiDraft.unitType!=='block'){toast(`${modelBlockDurationSec()}초 블록을 먼저 선택하세요`);return}if(!aiDraft.items.length){toast('최소 한 장의 이미지를 선택하세요');return}try{const out=await window.sceneFlow.saveBlockLibrary(selected.project,sceneId(selected),{...aiDraft,shotIds:currentShotIds(),conhapDir:activeConhapDir()});toast(`블록 라이브러리 v${String(out.version).padStart(3,'0')} 저장·열기 완료`)}catch(e){toast('블록 라이브러리 저장 실패: '+e.message)}}}
+const bindLegacyAiControls=bindAiControls;
+bindAiControls=()=>{const canonical=selected?.state_source==='hap-v2';if(canonical&&!$('exportPackage')){const phantom=document.createElement('button');phantom.id='exportPackage';phantom.style.display='none';document.body.appendChild(phantom)}bindLegacyAiControls();bindBlockLibraryActions()};
+const bindModelAwareControls=bindAiControls;
+bindAiControls=()=>{bindModelAwareControls();const model=$('aiModel');if(model){if(![...model.options].some(x=>x.value==='Seedance 2.5')){const option=document.createElement('option');option.value='Seedance 2.5';option.textContent='Seedance 2.5 · 30초 블록';model.appendChild(option)}model.value=aiDraft.model;model.onchange=e=>{aiDraft.model=e.target.value;if(aiDraft.model==='Seedance 2.5')aiDraft.unitType='block';const targets=aiDraft.unitType==='block'?aiBlocks():(detail?.conhap?.shots||[]);if(!targets.some(x=>(x.block_id||x.id)===aiDraft.targetId))aiDraft.targetId=targets[0]?.block_id||targets[0]?.id||'';syncTargetPackage();renderScene()};const unitOption=document.querySelector('#aiUnit option[value="block"]');if(unitOption)unitOption.textContent=`${modelBlockDurationSec()}초 블록`;const labels=document.querySelectorAll('.ai-toolbar label');if(labels[1])labels[1].textContent=`${modelBlockDurationSec()}초 블록`;if(labels[2])labels[2].textContent=aiDraft.unitType==='block'?`대상 ${modelBlockDurationSec()}초 블록`:'대상 컷'}}
+function bindMedia(){document.querySelectorAll('[data-image]').forEach(x=>x.onclick=()=>{$('lightboxImg').src=x.dataset.image;$('lightbox').style.display='grid'})}
+function bindAssetFolder(){const button=$('openAssetFolder');if(button)button.onclick=async()=>{try{const blockPrompt=sceneTab==='ready'&&aiDraft.unitType==='block',blockItems=blockPrompt?(aiDraft.items.length?aiDraft.items:Object.values(aiCandidates()).flat().filter(x=>x&&!x.combined&&x.absolutePath)):[];const out=await window.sceneFlow.openAssetsFolder(selected.project,sceneId(selected),blockPrompt?aiDraft.targetId:undefined,blockPrompt?aiDraft.model:undefined,blockPrompt?blockItems:undefined);toast(blockPrompt?`블록 에셋 ${out.count||0}개를 폴더에 모았습니다`:'짧은 사용자 에셋 폴더를 Finder에서 열었습니다')}catch(e){toast('에셋 폴더 열기 실패: '+e.message)}};const reload=$('reloadAssetLibrary');if(reload)reload.onclick=async()=>{try{detail=await window.sceneFlow.sceneDetail(selected.project,sceneId(selected));renderScene();toast(`에셋 ${detail?.assetLibrary?.files?.length||0}개를 다시 불러왔습니다`)}catch(e){toast('에셋 다시 불러오기 실패: '+e.message)}}}
+function toast(t){$('toast').textContent=t;$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',2200)}
+$('nav').onclick=e=>{const n=e.target.closest('[data-view]');if(!n)return;document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));n.classList.add('active');view=n.dataset.view;selected=null;detail=null;render()};$('projectSelect').onchange=e=>{project=projects.find(p=>p.id===e.target.value)||null;if(project)localStorage.setItem('filmmake.project',project.id);selected=null;detail=null;render()};$('refresh').onclick=load;$('search').oninput=()=>{if(!selected)renderIndex()};$('deleteProject').onclick=async()=>{if(!project)return;try{const out=await window.sceneFlow.deleteProject(project.id);if(!out.deleted)return;localStorage.removeItem('filmmake.project');toast('프로젝트를 휴지통으로 이동했습니다');await load()}catch(e){toast('프로젝트 삭제 실패: '+e.message)}};$('newProject').onclick=()=>$('modalBg').style.display='grid';$('cancel').onclick=()=>$('modalBg').style.display='none';$('lightbox').onclick=()=>$('lightbox').style.display='none';$('create').onclick=async()=>{const name=$('projectTitle').value.trim()||'새 프로젝트',script=$('projectScript').value.trim();if(!script){toast('시나리오를 입력하세요');return}try{const out=await window.sceneFlow.createProject(name,script);$('modalBg').style.display='none';toast(out.scene_count+'개 씬 생성 완료');await load()}catch(e){toast('생성 실패: '+e.message)}};load();
+function uploadPackItems(block){const ids=block.shot_ids||block.cut_ids||[],dir=activeConhapDir(),files=detail?.files||[],boards=ids.flatMap((id,sequence)=>files.filter(x=>x.relativePath===`${dir}/frames/${id}.png`).map(x=>({role:'storyboard',name:x.name,absolutePath:x.absolutePath,url:x.url,sequence}))),allRefs=Object.values(aiCandidates()).flat().filter(x=>x.role!=='storyboard'),selectedRefs=aiDraft.items.filter(x=>x.role!=='storyboard'),seen=new Set(),items=[];[...boards,...allRefs,...selectedRefs].forEach(x=>{const p=x.absolutePath;if(!p||seen.has(p))return;seen.add(p);items.push({...x})});return items}
+function buildUploadPackConfig(){const snapshot={model:aiDraft.model,unitType:aiDraft.unitType,targetId:aiDraft.targetId,items:[...(aiDraft.items||[])],uploads:[...(aiDraft.uploads||[])],prompt:aiDraft.prompt,combinedStoryboard:aiDraft.combinedStoryboard},blocks=aiBlocks(),payload=blocks.map(block=>{const blockId=block.block_id||block.id;aiDraft.model=snapshot.model;aiDraft.unitType='block';aiDraft.targetId=blockId;aiDraft.items=uploadPackItems(block);aiDraft.combinedStoryboard=null;return{blockId,durationSec:block.duration_sec,shotIds:block.shot_ids||block.cut_ids||[],prompt:buildAiPrompt(),items:[...aiDraft.items]}});aiDraft.model=snapshot.model;aiDraft.unitType=snapshot.unitType;aiDraft.targetId=snapshot.targetId;aiDraft.items=snapshot.items;aiDraft.uploads=snapshot.uploads;aiDraft.combinedStoryboard=snapshot.combinedStoryboard;aiDraft.prompt=snapshot.prompt||buildAiPrompt();return{model:snapshot.model,blocks:payload}}
+function addUploadPackButtons(){if(aiDraft.unitType!=='block')return;const panel=document.querySelector('.action-menu-panel');if(!panel)return;if(!$('openAllBlockLibraries')){const button=document.createElement('button');button.className='menu-action';button.id='openAllBlockLibraries';button.textContent='전체 블록 폴더 열기';button.onclick=async()=>{try{await window.sceneFlow.openBlockLibraries(selected.project,sceneId(selected),aiDraft.model);toast('전체 블록 폴더를 Finder에서 열었습니다')}catch(e){toast('전체 블록 폴더 열기 실패: '+e.message)}};panel.appendChild(button)}if(!$('saveUploadPack')){const button=document.createElement('button');button.className='menu-action';button.id='saveUploadPack';button.textContent='업로드용 전체 묶음 만들기';button.onclick=async()=>{try{const out=await window.sceneFlow.saveUploadPack(selected.project,sceneId(selected),buildUploadPackConfig());toast(`${out.blockCount}개 블록·${out.imageCount}개 이미지를 한 폴더에 모았습니다`)}catch(e){toast('업로드 묶음 생성 실패: '+e.message)}};panel.appendChild(button)}}
+const bindBlockLibraryActionsBase=bindBlockLibraryActions;
+bindBlockLibraryActions=()=>{bindBlockLibraryActionsBase();addUploadPackButtons()};
+function seedanceSec(value){const n=Number(value)||0;return n.toFixed(1).replace(/\.0$/,'')}
+function seedancePromptSegments(){
+  const schedule=timedShotSchedule(),shots=detail?.conhap?.shots||[],byId=new Map(schedule.map(x=>[x.id,x]));
+  const target=aiDraft.unitType==='block'?aiBlocks().find(x=>(x.block_id||x.id)===aiDraft.targetId):null;
+  if(aiDraft.unitType!=='block'){
+    const shot=byId.get(aiDraft.targetId)||schedule[0];
+    if(!shot)return[];
+    return [{shot,shots:[shot],start:0,end:shot.duration,duration:shot.duration,globalStart:shot.start,globalEnd:shot.end,timing_source:shot.timing_source}];
+  }
+  if(!target)return[];
+  const blockStart=finiteSec(target.start_sec)||0,blockEnd=finiteSec(target.end_sec)??(blockStart+(finiteSec(target.duration_sec)||modelBlockDurationSec()));
+  const ids=new Set(target.shot_ids||[]),exact=schedule.filter(x=>x.start<blockEnd&&x.end>blockStart&&(!ids.size||ids.has(x.id)));
+  if(exact.length&&exact.every(x=>x.timing_source==='explicit'))return exact.map(x=>({shot:x,shots:[x],start:Math.max(0,x.start-blockStart),end:Math.min(blockEnd,x.end)-blockStart,duration:Math.min(blockEnd,x.end)-Math.max(blockStart,x.start),globalStart:Math.max(blockStart,x.start),globalEnd:Math.min(blockEnd,x.end),timing_source:'explicit'})).filter(x=>x.end>x.start);
+  const source=sourceBlockShotSegments(target,blockStart,blockEnd);
+  if(source.length)return source;
+  const selected=schedule.filter(x=>x.start<blockEnd&&x.end>blockStart&&(!ids.size||ids.has(x.id)));
+  return selected.map(x=>({shot:x,shots:[x],start:Math.max(0,x.start-blockStart),end:Math.min(blockEnd,x.end)-blockStart,duration:Math.min(blockEnd,x.end)-Math.max(blockStart,x.start),globalStart:Math.max(blockStart,x.start),globalEnd:Math.min(blockEnd,x.end),timing_source:x.timing_source})).filter(x=>x.end>x.start);
+}
+function sourceBlockShotSegments(target,blockStart,blockEnd){
+  const source=target.source_blocks||[],schedule=timedShotSchedule(),byId=new Map(schedule.map(x=>[x.id,x]));
+  if(!source.length)return[];
+  return source.map(part=>{
+    const sourceStart=finiteSec(part.start_sec)||0,sourceEnd=finiteSec(part.end_sec)??(sourceStart+(finiteSec(part.duration_sec)||15));
+    const start=Math.max(blockStart,sourceStart),end=Math.min(blockEnd,sourceEnd);
+    if(end<=start)return null;
+    const primaryIds=part.primary_shot_ids||part.shot_ids||[],continuityIds=part.continuity_shot_ids||[];
+    const primary=primaryIds.map(id=>byId.get(id)).filter(Boolean),continuity=continuityIds.map(id=>byId.get(id)).filter(Boolean);
+    const allIds=[...new Set([...(part.shot_ids||[]),...continuityIds])],all=allIds.map(id=>byId.get(id)).filter(Boolean);
+    return {shot:primary[0]||continuity[0]||all[0],shots:primary.length?primary:all,continuityShots:continuity,shot_ids:allIds,primary_shot_ids:primaryIds,continuity_shot_ids:continuityIds,start:start-blockStart,end:end-blockStart,duration:end-start,globalStart:start,globalEnd:end,timing_source:'canonical-block',sourceBlockId:part.block_id,start_state:part.start_state,main_action:part.main_action,end_state:part.end_state};
+  }).filter(Boolean);
+}
+function seedanceReferenceLines(){return packageDisplayItems().map((x,i)=>{const role=x.role==='storyboard'?'스토리보드: 정본 CUT 순서·구도·샷 관계만 고정하고 패널 문자·플레이스홀더·선화 스타일은 가져오지 않는다':x.role==='character'?'인물 시트: 해당 인물의 얼굴·헤어·체형·의상·신발만 고정하고 시트 배경·포즈·라벨은 가져오지 않는다':x.role==='background'?'장소 레퍼런스: 공간 지리·구도·시간대·광원만 고정하고 이미지 속 인물·소품·문자는 가져오지 않는다':x.role==='prop'?'소품 레퍼런스: 해당 소품의 형태·재질·패키지 상태만 고정하고 무관한 소품·배경은 가져오지 않는다':'등록된 역할의 연속성만 고정하고 다른 속성은 추정하지 않는다';return `@Image ${i+1} — ${x.name}: ${role}.`}).join('\n')}
+function buildSeedancePrompt(){if(!String(aiDraft.model||'').startsWith('Seedance'))return buildAiPromptBase();const target=aiDraft.unitType==='block'?aiBlocks().find(x=>(x.block_id||x.id)===aiDraft.targetId):null,segments=seedancePromptSegments(),duration=aiDraft.unitType==='block'?(Number(target?.duration_sec)||modelBlockDurationSec()):(segments[0]?.duration||5),lastEnd=target?.end_state||segments.at(-1)?.shot?.continuity?.state_out||'지정된 마지막 컷의 종료 상태',refs=seedanceReferenceLines();const timeline=segments.map((part,index)=>{const shot=part.shot,previous=segments[index-1]?.shot,stateIn=index===0?(target?.start_state||shot.continuity?.state_in||'장면 시작 상태'):previous?.continuity?.state_out||shot.continuity?.state_in||'직전 컷의 종료 상태를 그대로 상속한다',stateOut=shot.continuity?.state_out||(index===segments.length-1?lastEnd:'다음 컷으로 이어지는 종료 상태'),camera=shot.camera||{},dialogue=shot.audio?.dialogue&&shot.audio.dialogue!=='none'?`대사·내레이션: 화자와 발화 방식은 유지하고 다음 원문을 한 글자도 바꾸지 않는다: {${shot.audio.dialogue}}`:'대사·내레이션: 없음. 영상에 없는 말을 추가하지 않는다.',transition=shot.continuity?.transition_from_prev||'직전 엔드스테이트의 자세·시선·소품 소유·화면축을 이어간다';return `[${seedanceSec(part.start)}–${seedanceSec(part.end)} | ${shot.id}]\n시작 상태: ${stateIn}\n이 구간에서 보이는 것: ${shot.new_information||shot.shot_intent||'지정된 컷의 사건'}\n중심 사건: ${shot.screen?.subject_action||shot.shot_intent||'지정된 컷의 중심 행동'}\n카메라: ${camera.camera_space||'shutter_front'} 공간, ${camera.shot_size||'지정된'} 프레이밍, ${camera.view_angle||'지정된'} 앵글, ${camera.lens_result||'지정된'} 초점·심도. 주된 이동은 ${camera.movement||'locked'} 하나만 사용하고 ${camera.screen_direction||'중립'} 화면 방향을 유지한다.\n이 구간에서 보이지 않는 것: ${shot.screen?.withheld_information||'다음 구간의 핵심 사건을 미리 보여주지 않는다.'}\n${dialogue}\n사운드: ${shot.audio?.sound||'여름밤의 자연스러운 환경음'}; 음악은 지정하지 않으며 추가하지 않는다. ${shot.audio?.silence&&shot.audio.silence!=='none'?`침묵: ${shot.audio.silence}.`:''}\n엔드스테이트: ${stateOut}\n전환: ${transition}.`}).join('\n\n');return `작업 모드: Seedance ${aiDraft.model==='Seedance 2.5'?'2.5':'2.0'} 신규 생성·이미지 레퍼런스 기반.\n단일 공간의 연속 장면. ${aiDraft.unitType==='block'&&duration>=30?'30초 단일 생성·하드 타임라인. 30초는 하나의 쇼트가 아니라 여러 컷과 비트의 시간 예산이다.':'15초 블록 하드 타임라인.'}\n화면비: 16:9. 실제 UI의 모델·길이 설정과 이 프롬프트의 시간값을 일치시킨다.\n\n— REFERENCE ROLES —\n${refs||'현재 선택된 레퍼런스 없음.'}\n\n— GLOBAL CONTINUITY LOCKS —\n인물은 지훈과 수연 두 명만 사용한다. 지훈은 흰 반팔 셔츠·짙은 남색 바지·짧은 검은 머리, 수연은 흰 반팔 셔츠·짙은 남색 주름치마·어깨 길이 검은 머리를 유지한다. 학교 로고와 액세서리를 추가하지 않는다.\n장소는 사용자 장소 레퍼런스의 문 닫은 문구점 앞 셔터 구조와 구도를 유지하는 여름밤이다. 가로등의 따뜻한 빛과 열린 청색 암부를 유지하고 배경 인물·새 간판·새 소품을 추가하지 않는다.\n소품은 반쯤 벗겨진 종이 포장의 네모난 빵또아 아이스크림 샌드 하나다. 손을 오갈수록 네모를 잃고, 마지막에 둘로 갈라지는 상태 변화를 보존한다. 샌드의 손 소유·베어 문 자국·모서리 상태를 컷 사이에서 이어간다.\n자연주의 연기: 감정은 처음부터 크게 드러내지 않는다. 시선·호흡·손 중 하나가 먼저 반응하고 짧은 정점 뒤 입술과 호흡이 회복된다. 자동 미소·고정 응시·표정 루프·플라스틱 얼굴·기계적인 립싱크를 만들지 않는다.\n\n— HARD TIMELINE —\n시간 구간은 연속·비중첩이며, 다음 구간은 앞 구간의 종료 자세·시선·소품 소유·화면 위치·카메라 방향을 상속한다.\n${timeline}\n\n— CON티 MAPPING RESULT —\n승인 콘티의 컷 ID·사건·대사·소품·공간·종료 상태를 위 시간 구간에 유지했다. 새 인물·새 행동·새 대사·자막·로고·BGM은 추가하지 않는다. 마지막은 ${lastEnd}에서 종료한다.`}
+const buildAiPromptBase=buildAiPrompt;
+const buildSeedancePromptBase=buildSeedancePrompt;
+buildSeedancePrompt=()=>{const out=buildSeedancePromptBase(),actual=seedanceSec(aiDraft.unitType==='block'?(aiBlocks().find(x=>(x.block_id||x.id)===aiDraft.targetId)?.duration_sec||modelBlockDurationSec()):5),note=`30초 블록 하드 타임라인. 실제 생성 길이는 ${actual}초다. 각 구간은 사건의 시간 예산이며 프레임 단위 편집점 보장이 아니다.`;if(!String(aiDraft.model||'').startsWith('Seedance'))return out;return out.replace('15초 블록 하드 타임라인.',note).replace('30초 단일 생성·하드 타임라인. 30초는 하나의 쇼트가 아니라 여러 컷과 비트의 시간 예산이다.',`${note} 30초는 하나의 쇼트가 아니라 여러 컷과 비트의 시간 예산이다.`)};
+buildAiPrompt=()=>buildSeedancePrompt();
+const buildSeedancePromptFinal=buildSeedancePrompt;
+buildSeedancePrompt=()=>buildSeedancePromptFinal().replace('— CON티 MAPPING RESULT —','— 콘티 반영 결과 —');
+const promptLibraryViewBase=promptLibraryView;
+promptLibraryView=(canonical)=>{let html=promptLibraryViewBase(canonical);html=html.replace(/<select id="aiModel">[\s\S]*?<\/select>/,`<select id="aiModel"><option value="Seedance 2.0" ${aiDraft.model==='Seedance 2.0'?'selected':''}>Seedance 2.0 · 15초 블록</option><option value="Seedance 2.5" ${aiDraft.model==='Seedance 2.5'?'selected':''}>Seedance 2.5 · 30초 블록</option><option value="Higgsfield" ${aiDraft.model==='Higgsfield'?'selected':''}>Higgsfield</option><option value="Runway" ${aiDraft.model==='Runway'?'selected':''}>Runway</option></select>`);html=html.replace(/<select id="aiUnit">[\s\S]*?<\/select>/,`<select id="aiUnit"><option value="shot" ${aiDraft.unitType==='shot'?'selected':''}>개별 컷</option><option value="block" ${aiDraft.unitType==='block'?'selected':''}>${modelBlockDurationSec()}초 블록</option></select>`);html=html.replace(/<label>대상 15초 블록<\/label>/,`<label>대상 ${modelBlockDurationSec()}초 블록</label>`);return html};
+function modelProfileNote(){const mode=seedanceInputMode(),modeText=mode==='reference_to_video'?'레퍼런스 투 비디오 · 선택한 에셋의 역할만 사용합니다.':'텍스트 투 비디오 · 에셋 선택 없이 바로 작성할 수 있습니다.';if(aiDraft.model==='Seedance 2.0')return `<div class="list-item" style="margin:10px 0 18px"><strong>Seedance 2.0 작업 프로필 · 15초</strong><small>${modeText} 하나의 중심 행동과 프롬프트 시간표를 맞추고 실제 서비스 UI의 길이·입력 제한을 최종 확인하세요.</small></div>`;if(aiDraft.model==='Seedance 2.5')return `<div class="list-item" style="margin:10px 0 18px"><strong>Seedance 2.5 작업 프로필 · 30초</strong><small>${modeText} 30초를 하나의 쇼트가 아니라 비트와 컷의 시간 예산으로 사용하고 실제 서비스 UI를 최종 확인하세요.</small></div>`;return ''}
+const buildSeedancePromptFilmMate=buildSeedancePrompt;
+buildSeedancePrompt=()=>{const out=buildSeedancePromptFilmMate();if(!String(aiDraft.model||'').startsWith('Seedance'))return out;const is25=aiDraft.model==='Seedance 2.5',target=aiDraft.unitType==='block'?aiBlocks().find(x=>(x.block_id||x.id)===aiDraft.targetId):null,actual=seedanceSec(aiDraft.unitType==='block'?(target?.duration_sec||modelBlockDurationSec()):5),label=aiDraft.unitType==='block'?`${actual}초 블록 하드 타임라인. 실제 생성 길이는 ${actual}초다.`:`${actual}초 개별 컷 하드 타임라인. 실제 생성 길이는 ${actual}초다.`,guidance=is25?'모델 프로필: Seedance 2.5. 30초 프로필에서는 여러 비트의 시간 예산을 보존하되 새 사건을 보태지 않는다.':'모델 프로필: Seedance 2.0. 15초 프로필에서는 한 중심 행동과 한 카메라 이동을 우선하고 사건을 과밀하게 넣지 않는다.';return out.replace(/30초 블록 하드 타임라인\. 실제 생성 길이는 [^\.\n]+초다\./,label).replace('\n\n— REFERENCE ROLES —',`\n${guidance}\n\n— REFERENCE ROLES —`)};
+buildAiPrompt=()=>buildSeedancePrompt();
+const promptLibraryViewFilmMate=promptLibraryView;
+promptLibraryView=(canonical)=>{const html=promptLibraryViewFilmMate(canonical);return html.replace('</div><section class="slot">',`</div>${modelProfileNote()}<section class="slot">`)};
+$('projectSelect').onchange=e=>{project=projects.find(p=>p.id===e.target.value)||null;if(project)localStorage.setItem('filmmate.project',project.id);selected=null;detail=null;render()};
+$('deleteProject').onclick=async()=>{if(!project)return;try{const out=await window.sceneFlow.deleteProject(project.id);if(!out.deleted)return;localStorage.removeItem('filmmate.project');localStorage.removeItem('filmmake.project');toast('프로젝트를 휴지통으로 이동했습니다');await load()}catch(e){toast('프로젝트 삭제 실패: '+e.message)}};
+const promptLibraryViewWithAssetFolder=promptLibraryView;
+function compactPromptActions(canonical){const blockTarget=aiDraft.unitType==='block',canPreview=packageDisplayItems().length>0,exportDisabled=!canPreview?'disabled':'',folderLabel=blockTarget?'블록 에셋 폴더 (선택)':'에셋 폴더 (선택)',main=`<button class="btn" id="openAssetFolder">${folderLabel}</button><button class="btn primary" id="requestCodexPrompt">Codex로 3개 언어 작성</button><button class="btn" id="approvePromptJob" disabled>현재 묶음 승인</button><button class="btn" id="copyPrompt">프롬프트 복사</button>${canonical&&blockTarget?'<button class="btn primary" id="saveBlockLibrary">블록 저장</button>':!canonical?`<button class="btn primary" id="exportPackage" ${exportDisabled}>프리뷰 만들기</button>`:''}`,menu=`<details class="action-menu"><summary class="btn">더보기</summary><div class="action-menu-panel"><button class="menu-action" id="reloadAssetLibrary">에셋 다시 불러오기</button>${blockTarget?'<button class="menu-action" id="openBlockLibrary">최근 블록 폴더 열기</button>':''}${!canonical&&blockTarget?'<button class="menu-action" id="copyCombined">스토리보드 합본 복사</button>':''}</div></details>`;return main+menu}
+promptLibraryView=(canonical)=>{const html=promptLibraryViewWithAssetFolder(canonical),actions=compactPromptActions(canonical);return html.replace(/<div class="export-bar">[\s\S]*?<\/div>/,`<div class="export-bar">${actions}</div>`)};
+const bindAiControlsWithAssetFolder=bindAiControls;
+bindAiControls=()=>{bindAiControlsWithAssetFolder();bindAssetFolder()};
+$('deleteProject').onclick=async()=>{if(!project||deletingProject)return;deletingProject=true;$('deleteProject').disabled=true;try{const target=project.id;const out=await window.sceneFlow.deleteProject(target);if(!out.deleted)return;localStorage.removeItem('filmmate.project');localStorage.removeItem('filmmake.project');toast('프로젝트를 휴지통으로 이동했습니다');await load()}catch(e){toast('프로젝트 삭제 실패: '+e.message)}finally{deletingProject=false;if(project)$('deleteProject').disabled=false}};
+// Seedance block prompt projection: canonical 15s conhap blocks are the source
+// of truth. Seedance 2.5 joins those blocks into 30s phases; it never invents
+// per-cut timings by evenly dividing a block.
+function buildSeedancePromptAccurate(){
+  if(!String(aiDraft.model||'').startsWith('Seedance'))return buildAiPromptBase();
+  const target=aiDraft.unitType==='block'?aiBlocks().find(x=>(x.block_id||x.id)===aiDraft.targetId):null;
+  const segments=seedancePromptSegments();
+  const duration=aiDraft.unitType==='block'?(finiteSec(target?.duration_sec)||modelBlockDurationSec()):(segments[0]?.duration||5);
+  const lastEnd=target?.end_state||segments.at(-1)?.end_state||segments.at(-1)?.shot?.continuity?.state_out||'지정된 마지막 컷의 종료 상태';
+  const refs=seedanceReferenceLines();
+  const timeline=segments.map((part,index)=>{
+    const primary=(part.shots&&part.shots.length?part.shots:[part.shot]).filter(Boolean);
+    const continuity=(part.continuityShots||[]).filter(Boolean);
+    const first=primary[0]||continuity[0],last=primary.at(-1)||continuity.at(-1)||first;
+    const stateIn=index===0?(target?.start_state||part.start_state||first?.continuity?.state_in||'장면 시작 상태'):(segments[index-1]?.end_state||segments[index-1]?.shots?.at(-1)?.continuity?.state_out||part.start_state||first?.continuity?.state_in||'직전 구간의 종료 상태를 그대로 상속한다');
+    const stateOut=part.end_state||last?.continuity?.state_out||(index===segments.length-1?lastEnd:'다음 구간으로 이어지는 종료 상태');
+    const eventLines=primary.map((shot,shotIndex)=>{
+      const camera=shot.camera||{},dialogue=shot.audio?.dialogue&&shot.audio.dialogue!=='none'?`대사·내레이션: ${shot.audio.dialogue}`:'대사·내레이션: 없음';
+      return `CUT ${shot.id} (${shotIndex+1}순서): ${shot.screen?.subject_action||shot.shot_intent||'지정된 컷의 중심 행동'} / 새 정보: ${shot.new_information||'지정된 콘티 정보'} / 카메라: ${camera.camera_space||'shutter_front'} 공간, ${camera.shot_size||'지정된'} 프레이밍, ${camera.view_angle||'지정된'} 앵글, ${camera.lens_result||'지정된'} 초점·심도, ${camera.movement||'locked'} / ${dialogue} / 소리: ${shot.audio?.sound||'여름밤의 자연스러운 환경음'}`;
+    }).join('\n');
+    const carry=continuity.length?`연속성 앵커(이 구간에서 새 사건으로 다시 실행하지 않음): ${continuity.map(x=>x.id).join(' → ')}. 앞 구간에서 시작된 동작·소품 상태·시선·축을 이어받는다.`:'';
+    const sourceLabel=part.sourceBlockId?` | 원본 ${part.sourceBlockId}`:'';
+    const globalLabel=part.globalStart!==undefined?` | 전역 ${seedanceSec(part.globalStart)}–${seedanceSec(part.globalEnd)}초`:'';
+    return `[${seedanceSec(part.start)}–${seedanceSec(part.end)}초${globalLabel}${sourceLabel}]\n시작 상태: ${stateIn}\n이 구간에서 보이는 컷 순서와 사건:\n${eventLines||`이 구간의 중심 사건: ${part.main_action||'지정된 콘티 사건'}`}\n${carry}\n카메라 전환은 위 컷 순서에 적힌 것만 사용하고, 새 인물·새 소품·새 사건을 먼저 보여주지 않는다.\n엔드스테이트: ${stateOut}\n전환: 다음 구간은 이 엔드스테이트의 자세·시선·소품 소유·화면축을 그대로 상속한다.`;
+  }).join('\n\n');
+  return `작업 모드: Seedance ${aiDraft.model==='Seedance 2.5'?'2.5':'2.0'} 신규 생성·이미지 레퍼런스 기반.\n단일 공간의 연속 장면. ${aiDraft.unitType==='block'&&duration>=30?'30초 단일 생성·하드 타임라인. 원본 15초 블록 두 개의 순서와 경계를 보존한다.':'15초 블록 하드 타임라인. 원본 콘합 블록의 시간과 컷 순서를 보존한다.'}\n화면비: 16:9. 실제 UI의 모델·길이 설정과 이 프롬프트의 시간값을 일치시킨다.\n\n— REFERENCE ROLES —\n${refs||'현재 선택된 레퍼런스 없음.'}\n\n— GLOBAL CONTINUITY LOCKS —\n인물은 지훈과 수연 두 명만 사용한다. 지훈은 흰 반팔 셔츠·짙은 남색 바지·짧은 검은 머리, 수연은 흰 반팔 셔츠·짙은 남색 주름치마·어깨 길이 검은 머리를 유지한다. 학교 로고와 액세서리를 추가하지 않는다.\n장소는 사용자 장소 레퍼런스의 문 닫은 문구점 앞 셔터 구조와 구도를 유지하는 여름밤이다. 가로등의 따뜻한 빛과 열린 청색 암부를 유지하고 배경 인물·새 간판·새 소품을 추가하지 않는다.\n소품은 반쯤 벗겨진 종이 포장의 네모난 빵또아 아이스크림 샌드 하나다. 손을 오갈수록 네모를 잃고, 마지막에 둘로 갈라지는 상태 변화를 보존한다. 샌드의 손 소유·베어 문 자국·모서리 상태를 컷 사이에서 이어간다.\n자연주의 연기: 감정은 처음부터 크게 드러내지 않는다. 시선·호흡·손 중 하나가 먼저 반응하고 짧은 정점 뒤 입술과 호흡이 회복된다. 자동 미소·고정 응시·표정 루프·플라스틱 얼굴·기계적인 립싱크를 만들지 않는다.\n\n— HARD TIMELINE —\n시간 구간은 연속·비중첩이며, 위에 표시한 원본 블록 경계와 컷 순서를 유지한다. 각 구간은 해당 시간 안에서만 실행한다.\n${timeline}\n\n— 콘티 반영 결과 —\n승인 콘티의 컷 ID·사건·대사·소품·공간·종료 상태를 원본 블록 시간에 매핑했다. 경계에서 반복된 컷은 연속성 앵커로만 전달하며 새 사건으로 재실행하지 않는다. 새 인물·새 행동·새 대사·자막·로고·BGM은 추가하지 않는다. 마지막은 ${lastEnd}에서 종료한다.`;
+}
+buildSeedancePrompt=buildSeedancePromptAccurate;
+buildAiPrompt=()=>buildSeedancePrompt();
+
+// Canonical Seedance prompt compiler. Internal directing metadata stays in
+// the production contract; the model-facing prompt receives observable cues.
+function seedanceCanonicalProject(){return detail?.conhap?.project||{}}
+function seedanceSourceLock(id){return (seedanceCanonicalProject().source_locks||[]).find(x=>x.id===id)?.value||''}
+function seedanceProjectTitle(){return seedanceCanonicalProject().project_title||safeProjectTitle(project)}
+function seedanceAspectRatio(){return seedanceCanonicalProject().ar||'16:9'}
+function seedanceSceneContract(){
+  const data=seedanceCanonicalProject(),bible=data.scene_bible||{},locks=data.source_locks||[];
+  const scene=`${data.location||selected?.location||'정본 장소'} / ${data.time||selected?.time||'정본 시간대'}`;
+  const rows=[
+    `장면·시간: ${scene}`,
+    bible.dramatic_line?`정본 장면선: ${bible.dramatic_line}`:'',
+    bible.entry_state?`장면 진입 상태: ${bible.entry_state}`:'',
+    bible.exit_state?`장면 종료 상태: ${bible.exit_state}`:'',
+    bible.visual_translation_rule?`화면 정보 우선순위: ${bible.visual_translation_rule}`:'',
+    ...locks.map(lock=>`${lock.id}: ${lock.value}`),
+  ].filter(Boolean);
+  return rows.join('\n');
+}
+function seedanceIsLiveAction(){
+  const plan=seedanceCanonicalProject().visual_reference_plan||{};
+  const renderHints=[plan.character_sheets?.render,plan.background_sheets?.render,plan.prop_sheets?.render].filter(Boolean).join(' ');
+  return /photo|real|live/i.test(renderHints);
+}
+function seedanceColorIntent(){
+  if(!seedanceIsLiveAction())return'';
+  return `— 실사 컬러 베이스 —
+절제된 자연 채도와 풍부한 색상 분리를 유지한다. 블랙 포인트는 약간만 열고 암부의 정보는 읽히게 하되 회색 안개처럼 뜨지 않게 한다. 깊은 암부의 채도는 낮추고 블랙은 중립으로 유지한다. 중간톤의 입체감과 자연스러운 피부색을 보존한다. 무거운 LUT·과도한 대비·과포화·밀키한 헤이즈를 굽지 않은 후반 그레이딩용 중립 베이스로 만든다.`;
+}
+function seedanceCameraInstruction(shot){
+  const c=shot?.camera||{};
+  const location=[c.camera_space,c.camera_zone,c.height].filter(Boolean).join(' / ')||'정본 카메라 위치';
+  const frame=[c.shot_size,c.view_angle].filter(Boolean).join(' / ')||'정본 프레이밍';
+  const lens=c.lens_result||'정본 렌즈·심도';
+  const movement=c.movement||'locked';
+  const axis=[c.axis_id,c.axis_side,c.screen_direction].filter(Boolean).join(' / ')||'정본 화면축';
+  return `위치=${location}; 프레이밍=${frame}; 렌즈·심도=${lens}; 이동=${movement} 하나만 사용; 화면축=${axis}.`;
+}
+function seedanceAudioText(shot){
+  const audio=shot?.audio||{},dialogue=audio.dialogue&&audio.dialogue!=='none'?audio.dialogue:null,sound=audio.sound&&audio.sound!=='none'?audio.sound:null,silence=audio.silence&&audio.silence!=='none'?audio.silence:null;
+  return [
+    dialogue?`대사·나레이션: 원문={${dialogue}}. 화자·발화 방식·단어·조사·어미·순서를 그대로 유지한다.`:'대사·나레이션: 없음. 영상에 없는 말이나 V.O.를 추가하지 않는다.',
+    sound?`샷 로컬 사운드: <${sound}>.`:'샷 로컬 사운드: 정본에 지정된 소리가 없으면 새 효과음이나 음악을 추가하지 않는다.',
+    silence?`침묵·호흡 간격: ${silence}.`:'',
+    '화면 텍스트: 요청 없음. 자막·말풍선·로고·새 간판 문구를 만들지 않는다.'
+  ].filter(Boolean).join('\n');
+}
+function seedanceCutTiming(shot,part,index){
+  if(part?.timing_source==='explicit'&&shot?.timing_source==='explicit')return `${seedanceSec(part.start)}–${seedanceSec(part.end)}초`;
+  return `원본 블록 내 ${index+1}순서. 컷별 정확한 초 단위 시각은 정본에 없음.`;
+}
+function seedancePerformanceInstruction(shot,part){
+  const start=Number(part?.start)||0,end=Number(part?.end)||start,span=Math.max(0,end-start),exact=part?.timing_source==='explicit'&&shot?.timing_source==='explicit';
+  const helper=globalThis.filmMateSeedancePerformance?.render;
+  if(typeof helper==='function')return helper(shot,{projectTitle:seedanceProjectTitle(),hasExactTiming:exact,start:seedanceSec(start+span*.2),apex:seedanceSec(start+span*.55),offset:seedanceSec(start+span*.85),end:seedanceSec(end)});
+  return `표정·연기(관찰 가능한 지시): ${shot?.screen?.subject_action||shot?.shot_intent||'정본의 중심 행동만 수행한다.'}\n시선·몸·호흡은 정본에 기록된 상태만 사용하고 새 감정이나 AU를 발명하지 않는다.\n회복 상태: ${shot?.continuity?.state_out||'다음 엔드스테이트로 이어간다.'}`;
+}
+function seedanceCutPrompt(shot,part,index){
+  const stateIn=index===0&&part?.start_state?part.start_state:(shot?.continuity?.state_in||part?.start_state||'직전 엔드스테이트를 상속한다');
+  const stateOut=shot?.continuity?.state_out||part?.end_state||'다음 컷으로 이어지는 상태';
+  const visible=shot?.new_information||shot?.shot_intent||'정본에 지정된 화면 정보';
+  const action=shot?.screen?.subject_action||shot?.shot_intent||'정본에 지정된 중심 행동';
+  const withheld=shot?.screen?.withheld_information||'다음 사건을 미리 보여주지 않는다';
+  const transition=shot?.continuity?.transition_from_prev||'직전 엔드스테이트의 자세·시선·소품·화면축을 상속한다';
+  return `CUT ${shot?.id||`C${String(index+1).padStart(2,'0')}`}
+시간: ${seedanceCutTiming(shot,part,index)}
+시작 상태: ${stateIn}
+보이는 정보: ${visible}
+중심 행동: ${action}
+카메라: ${seedanceCameraInstruction(shot)}
+보이지 않는 것: ${withheld}
+${seedancePerformanceInstruction(shot,part)}
+${seedanceAudioText(shot)}
+엔드스테이트: ${stateOut}
+전환: ${transition}.`;
+}
+function seedanceTimelineInterval(part,index,segments){
+  const primary=(part?.shots?.length?part.shots:[part?.shot]).filter(Boolean),continuity=(part?.continuityShots||[]).filter(Boolean);
+  const first=primary[0]||continuity[0],last=primary.at(-1)||continuity.at(-1)||first;
+  const previous=segments[index-1];
+  const startState=index===0?(activeAiBlock()?.start_state||part?.start_state||first?.continuity?.state_in||'장면 시작 상태'):(previous?.end_state||previous?.shots?.at(-1)?.continuity?.state_out||part?.start_state||first?.continuity?.state_in||'직전 구간의 엔드스테이트를 그대로 상속한다');
+  const endState=part?.end_state||last?.continuity?.state_out||'다음 구간으로 이어지는 엔드스테이트';
+  const source=part?.sourceBlockId?` | 원본 ${part.sourceBlockId}`:'';
+  const globalRange=part?.globalStart!==undefined?` | 전역 ${seedanceSec(part.globalStart)}–${seedanceSec(part.globalEnd)}초`:'';
+  const carry=continuity.length?`연속성 앵커: ${continuity.map(x=>x.id).join(' → ')}. 앞 구간의 자세·시선·소품 소유·화면축만 이어받고 새 사건으로 재실행하지 않는다.\n`:'';
+  return `[${seedanceSec(part.start)}–${seedanceSec(part.end)}초${globalRange}${source}]
+시작 상태: ${startState}
+원본 블록 중심 행동: ${part?.main_action||primary.map(x=>x.screen?.subject_action||x.shot_intent).filter(Boolean).join(' → ')||'정본 사건'}
+${carry}${primary.map((shot,shotIndex)=>seedanceCutPrompt(shot,part,shotIndex)).join('\n\n')}
+구간 엔드스테이트: ${endState}
+다음 구간: 이 자세·시선·소품 소유·화면 위치·광원·카메라 방향을 그대로 상속한다.`;
+}
+function seedanceSkillReady(){return seedanceSkillPolicy?.status==='READY'&&Boolean(seedanceSkillPolicy?.bundle_sha256)}
+function seedanceInputMode(items=packageDisplayItems()){return items.length?'reference_to_video':'text_to_video'}
+function seedanceSkillProvenance(){return{schema_version:1,name:'seedance-prompt-rules',status:seedanceSkillPolicy?.status||'BLOCKED',path:seedanceSkillPolicy?.path||null,bundle_sha256:seedanceSkillPolicy?.bundle_sha256||null,short_hash:seedanceSkillPolicy?.short_hash||null,required_file_count:seedanceSkillPolicy?.required_file_count||0,loaded_file_count:seedanceSkillPolicy?.loaded_file_count||0,checked_at:seedanceSkillPolicy?.checked_at||null}}
+function seedanceSkillBlockedPrompt(){const failed=(seedanceSkillPolicy?.rule_checks||[]).filter(x=>x.status!=='PASS').map(x=>x.id),missing=seedanceSkillPolicy?.missing_files||[],reason=[missing.length?`누락 파일: ${missing.join(', ')}`:'',failed.length?`실패 규칙: ${failed.join(', ')}`:'',seedanceSkillPolicy?.error||''].filter(Boolean).join(' / ')||'seedance-prompt-rules 원본을 읽을 수 없음';return `SKILL_GATE_BLOCKED\n실패 규칙: FilmMate의 모든 영상 프롬프트는 seedance-prompt-rules 원본을 필수로 사용한다.\n수정 필요: ${reason}\nstatus: BLOCKED`;}
+function buildSeedancePromptRules(){
+  if(!seedanceSkillReady())return seedanceSkillBlockedPrompt();
+  const target=activeAiBlock(),segments=seedancePromptSegments(),duration=aiDraft.unitType==='block'?(finiteSec(target?.duration_sec)||modelBlockDurationSec()):(finiteSec(segments[0]?.duration)||5),is25=aiDraft.model==='Seedance 2.5',is20=aiDraft.model==='Seedance 2.0';
+  const inputMode=seedanceInputMode(),usesReferences=inputMode==='reference_to_video';
+  const refs=seedanceReferenceLines()||'업로드 레퍼런스 없음. 이 요청은 텍스트 투 비디오이며 @Image 태그를 만들지 않는다. 승인 콘티와 정본 텍스트만 장면·행동·카메라·연속성의 근거로 사용한다.';
+  const lastEnd=target?.end_state||segments.at(-1)?.end_state||segments.at(-1)?.shots?.at(-1)?.continuity?.state_out||segments.at(-1)?.shot?.continuity?.state_out||'정본의 마지막 엔드스테이트';
+  const modelNote=is25?'Seedance 2.5의 30초 프로필은 여러 비트와 컷의 시간 예산이다. 단일 쇼트나 프레임 단위 편집점을 보장한다고 해석하지 않는다.':is20?'Seedance 2.0의 15초 프로필에서는 원본 블록의 중심 행동과 컷별 카메라 한 동작을 우선한다.':`${aiDraft.model}에는 seedance-prompt-rules의 정본·레퍼런스·연속성·연기·QA 구조를 적용하되, 해당 도구 UI에서 확인하지 않은 Seedance 전용 기능명은 강제하지 않는다.`;
+  const timeline=segments.map(seedanceTimelineInterval).join('\n\n');
+  const color=seedanceColorIntent();
+  const referenceRule=usesReferences?'충돌 우선순위: 인물·의상은 인물 시트, 컷 순서·구도는 스토리보드, 공간·광원은 배경, 소품 형태·재질은 소품 레퍼런스를 우선한다. 파일명만으로 레퍼런스 내용을 추정하지 않는다.':'레퍼런스를 요구하거나 존재하지 않는 @Image 태그를 발명하지 않는다. 외형·공간·소품은 승인 정본에 기록된 범위만 묘사하고 미확정 세부를 추가하지 않는다.';
+  return `작업 모드: ${aiDraft.model} 신규 생성 · ${usesReferences?'레퍼런스 투 비디오':'텍스트 투 비디오'} 기반.
+
+— 도구 설정 —
+모델: ${aiDraft.model}
+패키지 단위: ${aiDraft.unitType==='block'?'블록':'개별 컷'} / 실제 목표 길이 ${seedanceSec(duration)}초
+화면비: ${seedanceAspectRatio()}
+${modelNote}
+실제 서비스 UI의 모델·길이·화면비·입력 가능 소재가 위 설정과 일치하는지 생성 전에 확인한다.
+
+— 레퍼런스 역할 —
+${refs}
+${referenceRule}
+
+— 정본·연속성 잠금 —
+${seedanceSceneContract()}
+승인 콘티의 인물 수·얼굴·헤어·의상·신발·장소·시간대·소품 소유·베어 문 자국·손·시선·화면축·광원·그림자·엔드스테이트를 컷과 블록 사이에서 유지한다.
+
+— 실행 규칙 —
+각 CUT에는 중심 신체 행동 하나와 주된 카메라 행동 하나만 둔다. 원본 블록 경계와 컷 순서를 바꾸지 않는다. 다음 구간은 앞 구간의 엔드스테이트를 상속한다. 등장·퇴장·핸드오프처럼 정본에 정확한 시각이 있는 사건만 초 단위로 고정한다. 정본에 없는 컷별 시각·내면 동기·행동·소품·대사·전환을 만들지 않는다.
+
+${color?`${color}\n\n`:''}— 하드 타임라인 —
+시간 구간은 0초부터 ${seedanceSec(duration)}초까지 연속·비중첩이다. 원본 블록의 경계와 CUT 순서만 사용한다.
+${timeline}
+
+— 사운드·텍스트 공통 잠금 —
+각 CUT의 { } 안 원문만 해당 CUT에서 발화한다. < > 안 샷 로컬 사운드만 사용한다. 요청하지 않은 대사·V.O.·BGM·효과음·자막·말풍선·로고·화면 문구를 추가하지 않는다. 정확한 립싱크는 지정된 원문과 호흡에만 맞춘다.
+
+— 핵심 금지 —
+인물 교체·추가 인물·얼굴/헤어/의상 변경·추가 팔다리·손가락 왜곡·소품 형태 변화·화면축 반전·광원 급변·경계 컷 재실행·자동 미소·고정 응시·감정 점프·표정 루프·기계적인 립싱크를 만들지 않는다.
+
+— 콘티 반영 결과 —
+정본 컷 ID·사건·대사·소품·공간·카메라·엔드스테이트를 위 하드 타임라인에 매핑했다. 연속성 앵커는 상태만 전달하고 사건으로 반복하지 않는다. 마지막은 ${lastEnd}에서 종료한다.`;
+}
+buildSeedancePrompt=buildSeedancePromptRules;
+buildAiPrompt=()=>{const prompt=buildSeedancePrompt();aiDraft.skillBundleSha256=seedanceSkillPolicy?.bundle_sha256||null;return prompt};
+
+// Auteur-inspired production contract and deterministic delivery gate.
+// Both are derived previews: they never mutate HAP canonical state.
+function activeAiBlock(){return aiDraft.unitType==='block'?aiBlocks().find(x=>(x.block_id||x.id)===aiDraft.targetId):null}
+const ensureCombinedStoryboardBeforeDirectionGate=ensureCombinedStoryboard;
+ensureCombinedStoryboard=async()=>{
+  const targetId=aiDraft.targetId,out=await ensureCombinedStoryboardBeforeDirectionGate();
+  if(out&&aiDraft.unitType==='block'&&aiDraft.targetId===targetId)aiDraft.prompt=buildAiPrompt();
+  return out;
+};
+function productionDirectionSheet(block=activeAiBlock()){
+  const byId=new Map((detail?.conhap?.shots||[]).map(x=>[x.id,x]));
+  const primaryIds=block?.primary_shot_ids||block?.shot_ids||currentShotIds();
+  const sourceBlocks=block?.source_blocks||[];
+  const camera=primaryIds.map(id=>byId.get(id)).filter(Boolean).map(shot=>{
+    const c=shot.camera||{};
+    return `${shot.id} ${c.shot_size||'지정 프레이밍'} / ${c.view_angle||'지정 앵글'} / ${c.movement||'locked'}`;
+  });
+  const center=sourceBlocks.map(x=>x.main_action).filter(Boolean).join(' → ')||primaryIds.map(id=>byId.get(id)?.screen?.subject_action||byId.get(id)?.shot_intent).filter(Boolean).join(' → ')||'승인 콘티의 중심 사건';
+  const sourceIds=block?.source_block_ids||sourceBlocks.map(x=>x.block_id).filter(Boolean);
+  const duration=finiteSec(block?.duration_sec)||modelBlockDurationSec();
+  const rows=[
+    ['정본 기준',`${sceneId(selected)} · ${sourceIds.join(' + ')||'승인 콘티'} · ${primaryIds.join(' → ')||'컷 미지정'}`],
+    ['블록 계약',`${aiDraft.model} · ${duration}초 · 16:9 · 원본 블록 경계 보존`],
+    ['중심 사건',center],
+    ['카메라 문법',camera.join(' → ')||'승인 콘티의 프레이밍·앵글·무빙만 사용'],
+    ['연기 방향','트리거 → 시선·호흡·손 중 하나가 먼저 반응 → 낮은 강도의 FACS → 잔여 반응을 남기며 회복'],
+    ['실사 컬러 베이스','모션그래픽 제외. 절제된 채도, 색 분리, 열린 암부, 하이라이트 보호, 후반 그레이딩용 중립 베이스'],
+    ['금지','새 인물·사건·대사·소품·자막·로고·BGM, 경계 컷 재실행, 자동 미소, 고정 응시, 표정 루프, 기계적 립싱크'],
+  ];
+  const markdown=[
+    '# FilmMate 제작 기준서',
+    '',
+    `- 프로젝트: ${safeProjectTitle(project)}`,
+    `- 장면: ${sceneId(selected)} ${safeSceneTitle(selected)}`,
+    `- 생성 대상: ${aiDraft.targetId} / ${aiDraft.model} / ${duration}초`,
+    '- 성격: HAP 정본을 변경하지 않는 작업용 투영',
+    '',
+    ...rows.flatMap(([label,value])=>[`## ${label}`,value,'']),
+  ].join('\n').trim();
+  return {schema_version:1,preview:true,canonical:false,project:safeProjectTitle(project),scene_id:sceneId(selected),scene_title:safeSceneTitle(selected),target_id:aiDraft.targetId,model:aiDraft.model,duration_sec:duration,source_block_ids:sourceIds,primary_shot_ids:primaryIds,rows,markdown};
+}
+function qaCheck(id,label,status,detailText){return{id,label,status,detail:detailText}}
+function pushSkillBindingChecks(push){const ready=seedanceSkillReady(),sameHash=ready&&aiDraft.skillBundleSha256===seedanceSkillPolicy.bundle_sha256;push('SEEDANCE_SKILL_SOURCE','씨댄스 스킬 원본',ready,ready?`seedance-prompt-rules #${seedanceSkillPolicy.short_hash} · ${seedanceSkillPolicy.loaded_file_count}/${seedanceSkillPolicy.required_file_count}개 파일`:'','스킬 원본·필수 참고 파일·규칙 검사 실패');push('PROMPT_SKILL_HASH','프롬프트–스킬 버전',sameHash,sameHash?`현재 스킬 #${seedanceSkillPolicy.short_hash}로 생성됨`:'','프롬프트 생성 후 스킬이 변경됐거나 스킬 출처가 없음')}
+function scanSeedanceBlock(block=activeAiBlock(),prompt=String(aiDraft.prompt||''),items=packageDisplayItems()){
+  const checks=[],push=(id,label,ok,passText,failText,severity='FAIL')=>checks.push(qaCheck(id,label,ok?'PASS':severity,ok?passText:failText));
+  const blocks=aiBlocks(),knownShots=new Set((detail?.conhap?.shots||[]).map(x=>x.id)),byId=new Map((detail?.conhap?.shots||[]).map(x=>[x.id,x]));
+  const blockId=block?.block_id||block?.id||aiDraft.targetId,start=finiteSec(block?.start_sec),end=finiteSec(block?.end_sec),duration=finiteSec(block?.duration_sec);
+  pushSkillBindingChecks(push);
+  push('BLOCK_EXISTS','대상 블록',Boolean(block),blockId||'블록 확인','선택된 블록이 없음');
+  push('BLOCK_TIME','블록 시간',start!==null&&end!==null&&duration!==null&&end>start&&Math.abs((end-start)-duration)<.01,`${start}–${end}초 / ${duration}초`,'시작·종료·길이가 불일치함');
+  const orderedBlocks=[...blocks].sort((a,b)=>(finiteSec(a.start_sec)||0)-(finiteSec(b.start_sec)||0));
+  const timelineOk=orderedBlocks.every((x,index)=>index===0||Math.abs((finiteSec(orderedBlocks[index-1].end_sec)||0)-(finiteSec(x.start_sec)||0))<.01);
+  push('MODEL_TIMELINE','전체 타임라인',timelineOk,`${orderedBlocks.length}개 블록 연속·비중첩`,'블록 사이에 공백 또는 중첩이 있음');
+  const sourceIds=block?.source_block_ids||[],expectedSources=aiDraft.model==='Seedance 2.5'?(duration>=29.99?2:1):1;
+  push('SOURCE_MAPPING','원본 블록 매핑',sourceIds.length===expectedSources,sourceIds.join(' + ')||'파생 타임라인',`${aiDraft.model} ${duration||'?'}초 블록은 원본 블록 ${expectedSources}개가 필요함`);
+  const allSourceIds=blocks.flatMap(x=>x.source_block_ids||[]);
+  push('SOURCE_UNIQUE','원본 블록 1회 소유',allSourceIds.length===new Set(allSourceIds).size,'중복 매핑 없음','하나의 원본 블록이 여러 생성 블록에 중복됨');
+  const primaryIds=block?.primary_shot_ids||block?.shot_ids||[],carryIds=block?.continuity_shot_ids||[];
+  const unknown=[...new Set([...(block?.shot_ids||[]),...primaryIds,...carryIds])].filter(id=>!knownShots.has(id));
+  push('KNOWN_CUTS','콘티 컷 정합성',unknown.length===0,`${primaryIds.join(' → ')||'주 컷 없음'} 확인`,`정본에 없는 컷: ${unknown.join(', ')}`);
+  const allPrimary=blocks.flatMap(x=>x.primary_shot_ids||x.shot_ids||[]);
+  push('PRIMARY_UNIQUE','주 컷 1회 실행',allPrimary.length===new Set(allPrimary).size,'모든 주 컷의 소유 블록이 하나임','두 개 이상 블록에서 주 사건으로 반복되는 컷이 있음');
+  const segments=block&&blockId===aiDraft.targetId?seedancePromptSegments():[],segmentOk=segments.length>0&&Math.abs(segments[0].start)<.01&&Math.abs(segments.at(-1).end-(duration||0))<.01&&segments.every((x,index)=>index===0||Math.abs(segments[index-1].end-x.start)<.01);
+  push('HARD_TIMELINE','하드 타임라인',segmentOk,`${segments.length}개 구간이 0–${duration}초를 연속 커버`,'프롬프트 구간에 공백·중첩·길이 오류가 있음');
+  const stateMissing=(block?.source_blocks||[]).filter(x=>!x.start_state||!x.end_state).map(x=>x.block_id);
+  push('STATE_LOCK','시작·종료 상태',stateMissing.length===0,'모든 원본 블록의 상태 잠금 있음',`상태 미기록: ${stateMissing.join(', ')}`,'WARN');
+  const missingPromptCuts=primaryIds.filter(id=>!prompt.includes(`CUT ${id}`));
+  push('PROMPT_CUTS','컷별 프롬프트',missingPromptCuts.length===0,'주 컷이 각각 분리되어 있음',`프롬프트에서 누락: ${missingPromptCuts.join(', ')}`);
+  const dialogueMissing=primaryIds.map(id=>byId.get(id)).filter(Boolean).filter(shot=>shot.audio?.dialogue&&shot.audio.dialogue!=='none'&&!prompt.includes(shot.audio.dialogue)).map(shot=>shot.id);
+  push('DIALOGUE_LOCK','대사 원문',dialogueMissing.length===0,'발화 컷의 원문이 보존됨',`대사 원문 누락: ${dialogueMissing.join(', ')}`);
+  const carryNoReplay=prompt.includes('새 사건으로 다시 실행하지 않음')||prompt.includes('재실행하지 않는다');
+  const carryOk=!carryIds.length||(prompt.includes('연속성 앵커')&&carryIds.every(id=>prompt.includes(id))&&carryNoReplay);
+  push('CARRY_ANCHOR','경계 컷 처리',carryOk,carryIds.length?`${carryIds.join(' → ')}은 앵커로만 사용`:'경계 앵커 없음','경계 컷이 새 사건으로 재실행될 수 있음');
+  const allowedRoles={storyboard:0,character:1,background:2,prop:3},paths=items.map(x=>x.absolutePath).filter(Boolean),referenceMode=items.length>0,rolesOk=items.every(x=>Object.hasOwn(allowedRoles,x.role)&&x.absolutePath);
+  const modeOk=referenceMode?prompt.includes('레퍼런스 투 비디오'):prompt.includes('텍스트 투 비디오')&&!/@Image\s+\d+/.test(prompt);
+  push('INPUT_MODE','입력 모드',modeOk,referenceMode?'선택 에셋 기반 레퍼런스 투 비디오':'에셋 없는 텍스트 투 비디오',referenceMode?'프롬프트에 레퍼런스 기반 모드가 선언되지 않음':'텍스트 모드에 존재하지 않는 @Image가 포함됨');
+  push('REFERENCE_ROLES','레퍼런스 역할',!referenceMode||rolesOk,referenceMode?`${items.length}개 레퍼런스의 역할이 고정됨`:'레퍼런스 미사용 · 정본 텍스트로 생성', '역할 또는 파일 경로가 없는 레퍼런스가 있음');
+  const storyboardCount=items.filter(x=>x.role==='storyboard').length;
+  push('STORYBOARD_REFERENCE','스토리보드 기준',true,storyboardCount?`${storyboardCount}개 스토리보드 이미지로 구도 보조`:'이미지 미사용 · 승인 콘티의 컷 순서·카메라 기록을 텍스트로 보존','');
+  push('REFERENCE_UNIQUE','레퍼런스 중복',paths.length===new Set(paths).size,'중복 파일 없음','같은 파일이 여러 @Image로 반복됨');
+  const orderedOk=items.every((x,index)=>index===0||(allowedRoles[items[index-1].role]??9)<=(allowedRoles[x.role]??9));
+  push('UPLOAD_ORDER','업로드 순서',orderedOk,'스토리보드 → 캐릭터 → 배경 → 소품','레퍼런스 역할 순서가 틀림');
+  const refMapOk=referenceMode?items.every((x,index)=>prompt.includes(`@Image ${index+1}`)&&prompt.includes(x.name)):!/@Image\s+\d+/.test(prompt);
+  push('PROMPT_REFERENCES','프롬프트–에셋 매핑',refMapOk,referenceMode?'@Image 순서와 파일명이 일치':'텍스트 모드 · @Image 없음','선택 에셋과 프롬프트 @Image 표기가 불일치함');
+  const requiredSections=['— 도구 설정 —','— 레퍼런스 역할 —','— 정본·연속성 잠금 —','— 실행 규칙 —','— 하드 타임라인 —','— 사운드·텍스트 공통 잠금 —','— 핵심 금지 —','— 콘티 반영 결과 —'];
+  const missingSections=requiredSections.filter(section=>!prompt.includes(section));
+  push('PROMPT_STRUCTURE','씨댄스 전체 구조',missingSections.length===0,'도구·레퍼런스·정본·타임라인·사운드·금지·대조 구조 있음',`누락 섹션: ${missingSections.join(', ')}`);
+  const cutChunk=id=>{const startIndex=prompt.indexOf(`CUT ${id}`);if(startIndex<0)return'';const nextIndex=prompt.indexOf('\nCUT ',startIndex+5);return prompt.slice(startIndex,nextIndex<0?prompt.length:nextIndex)};
+  const performanceMissing=primaryIds.filter(id=>{const chunk=cutChunk(id);return !chunk.includes('표정·연기(관찰 가능한 지시):')||!chunk.includes('회복 상태:')});
+  const facsOk=performanceMissing.length===0&&prompt.includes('자동 미소')&&prompt.includes('표정 루프')&&prompt.includes('기계적인 립싱크');
+  push('PERFORMANCE_GUARD','관찰 가능한 연기·FACS',facsOk,'컷별 관찰 지시·회복·AI 연기 금지 조건 있음',`관찰 가능한 연기 또는 회복 누락: ${performanceMissing.join(', ')}`);
+  const abstractLeak=/^(?:행동 목표|서브텍스트|트리거|표면 전술):/m.test(prompt);
+  push('PERFORMANCE_COMPILE','내부 연기 카드 변환',!abstractLeak,'추상 연기 필드가 화면 행동으로 변환됨','행동 목표·서브텍스트·트리거·표면 전술이 최종 프롬프트에 원문 필드로 노출됨');
+  const overloadedCuts=primaryIds.filter(id=>{const chunk=cutChunk(id);return (chunk.match(/\n중심 행동:/g)||[]).length!==1||(chunk.match(/\n카메라:/g)||[]).length!==1});
+  push('ONE_ACTION_CAMERA','컷별 중심 행동·카메라',overloadedCuts.length===0,'각 CUT에 중심 행동 1개·카메라 지시 1개',`구조 과밀 또는 누락: ${overloadedCuts.join(', ')}`);
+  const soundMissing=primaryIds.map(id=>byId.get(id)).filter(Boolean).filter(shot=>shot.audio?.sound&&shot.audio.sound!=='none'&&!prompt.includes(`<${shot.audio.sound}>`)).map(shot=>shot.id);
+  push('SHOT_LOCAL_AUDIO','샷 로컬 사운드',soundMissing.length===0,'정본 사운드가 해당 CUT의 < > 안에 있음',`샷 로컬 사운드 누락: ${soundMissing.join(', ')}`);
+  const unlockedDialogue=primaryIds.map(id=>byId.get(id)).filter(Boolean).filter(shot=>shot.audio?.dialogue&&shot.audio.dialogue!=='none'&&!prompt.includes(`{${shot.audio.dialogue}}`)).map(shot=>shot.id);
+  push('DIALOGUE_BRACES','대사·나레이션 원문 잠금',unlockedDialogue.length===0,'정확한 발화문이 { } 안에 잠김',`{ } 원문 잠금 누락: ${unlockedDialogue.join(', ')}`);
+  const canonicalTiming=segments.some(x=>x.timing_source==='canonical-block'),inventedTiming=/기준 상태에서\s*\d+(?:\.\d+)?에 onset/.test(prompt);
+  push('NO_FAKE_CUT_TIMES','컷 시간 임의 생성',!canonicalTiming||!inventedTiming,canonicalTiming?'원본 블록 내 컷 순서만 사용':'컷별 명시 시간 사용','정본에 없는 컷별 초 단위 시각을 만듦');
+  const status=checks.some(x=>x.status==='FAIL')?'FAIL':checks.some(x=>x.status==='WARN')?'WARN':'PASS';
+  return {schema_version:1,preview:true,canonical:false,status,target_id:blockId,model:aiDraft.model,skill_provenance:seedanceSkillProvenance(),checked_at:new Date().toISOString(),counts:{pass:checks.filter(x=>x.status==='PASS').length,warn:checks.filter(x=>x.status==='WARN').length,fail:checks.filter(x=>x.status==='FAIL').length},checks};
+}
+function scanSingleShotPrompt(prompt=String(aiDraft.prompt||''),items=packageDisplayItems()){
+  const checks=[],push=(id,label,ok,passText,failText,severity='FAIL')=>checks.push(qaCheck(id,label,ok?'PASS':severity,ok?passText:failText)),shot=(detail?.conhap?.shots||[]).find(x=>x.id===aiDraft.targetId),id=shot?.id||aiDraft.targetId;
+  pushSkillBindingChecks(push);
+  push('SHOT_EXISTS','대상 컷',Boolean(shot),id||'컷 확인','선택된 컷이 정본에 없음');
+  const sections=['— 도구 설정 —','— 레퍼런스 역할 —','— 정본·연속성 잠금 —','— 실행 규칙 —','— 하드 타임라인 —','— 사운드·텍스트 공통 잠금 —','— 핵심 금지 —','— 콘티 반영 결과 —'],missing=sections.filter(x=>!prompt.includes(x));
+  push('PROMPT_STRUCTURE','씨댄스 전체 구조',missing.length===0,'스킬 전체 구조 있음',`누락 섹션: ${missing.join(', ')}`);
+  const referenceMode=items.length>0,rolesOk=items.every(x=>['storyboard','character','background','prop'].includes(x.role)&&x.absolutePath),storyboardCount=items.filter(x=>x.role==='storyboard').length;
+  const modeOk=referenceMode?prompt.includes('레퍼런스 투 비디오'):prompt.includes('텍스트 투 비디오')&&!/@Image\s+\d+/.test(prompt);
+  push('INPUT_MODE','입력 모드',modeOk,referenceMode?'선택 에셋 기반 레퍼런스 투 비디오':'에셋 없는 텍스트 투 비디오',referenceMode?'프롬프트에 레퍼런스 기반 모드가 선언되지 않음':'텍스트 모드에 존재하지 않는 @Image가 포함됨');
+  push('REFERENCE_ROLES','레퍼런스 역할',!referenceMode||rolesOk,referenceMode?`${items.length}개 레퍼런스 역할 고정`:'레퍼런스 미사용 · 정본 텍스트로 생성','역할 또는 파일 경로가 없는 레퍼런스가 있음');
+  push('STORYBOARD_REFERENCE','스토리보드 기준',true,storyboardCount?`${storyboardCount}개 이미지로 구도 보조`:'이미지 미사용 · 승인 콘티의 컷·카메라 기록을 텍스트로 보존','');
+  const refMap=referenceMode?items.every((x,index)=>prompt.includes(`@Image ${index+1}`)&&prompt.includes(x.name)):!/@Image\s+\d+/.test(prompt);
+  push('PROMPT_REFERENCES','프롬프트–에셋 매핑',refMap,referenceMode?'@Image 순서·파일명 일치':'텍스트 모드 · @Image 없음','선택 에셋과 @Image 표기가 불일치');
+  const chunk=prompt.includes(`CUT ${id}`)?prompt.slice(prompt.indexOf(`CUT ${id}`)):'';
+  push('PROMPT_CUT','컷 사건',Boolean(chunk),`CUT ${id} 있음`,`CUT ${id} 누락`);
+  push('ONE_ACTION_CAMERA','중심 행동·카메라',(chunk.match(/\n중심 행동:/g)||[]).length===1&&(chunk.match(/\n카메라:/g)||[]).length===1,'행동 1개·카메라 1개','행동·카메라 구조 누락 또는 과밀');
+  const dialogue=shot?.audio?.dialogue&&shot.audio.dialogue!=='none'?shot.audio.dialogue:null,sound=shot?.audio?.sound&&shot.audio.sound!=='none'?shot.audio.sound:null;
+  push('DIALOGUE_BRACES','대사 원문 잠금',!dialogue||prompt.includes(`{${dialogue}}`),dialogue?'{ } 원문 보존':'대사 없음','{ } 대사 원문 누락');
+  push('SHOT_LOCAL_AUDIO','샷 로컬 사운드',!sound||prompt.includes(`<${sound}>`),sound?'< > 사운드 보존':'사운드 미지정','< > 사운드 누락');
+  const performance=chunk.includes('표정·연기(관찰 가능한 지시):')&&chunk.includes('회복 상태:')&&prompt.includes('자동 미소')&&prompt.includes('기계적인 립싱크');
+  push('PERFORMANCE_GUARD','관찰 가능한 연기·FACS',performance,'선행 반응·회복·AI 연기 억제 있음','연기 또는 AI 표정·립싱크 억제 누락');
+  push('PERFORMANCE_COMPILE','내부 연기 카드 변환',!/^(?:행동 목표|서브텍스트|트리거|표면 전술):/m.test(prompt),'추상 필드가 화면 행동으로 변환됨','내부 연기 필드가 최종 프롬프트에 노출됨');
+  push('LIVE_ACTION_COLOR','실사 컬러 조건',!seedanceIsLiveAction()||(prompt.includes('— 실사 컬러 베이스 —')&&prompt.includes('절제된 자연 채도')),seedanceIsLiveAction()?'실사 플레이트에만 중립 컬러 베이스 적용':'실사 아님','실사 컬러 베이스 누락');
+  const status=checks.some(x=>x.status==='FAIL')?'FAIL':checks.some(x=>x.status==='WARN')?'WARN':'PASS';
+  return{schema_version:1,preview:true,canonical:false,status,target_id:id,model:aiDraft.model,skill_provenance:seedanceSkillProvenance(),checked_at:new Date().toISOString(),counts:{pass:checks.filter(x=>x.status==='PASS').length,warn:checks.filter(x=>x.status==='WARN').length,fail:checks.filter(x=>x.status==='FAIL').length},checks};
+}
+function currentPromptQa(){return aiDraft.unitType==='block'?scanSeedanceBlock():scanSingleShotPrompt()}
+function directionSheetView(){
+  const sheet=productionDirectionSheet();
+  return `<section class="direction-card"><div class="direction-head"><div><strong>제작 기준서</strong><small>콘티에서 생성된 작업 계약 · HAP 정본 미변경</small></div><button class="btn" id="copyDirectionSheet">복사</button></div><div class="direction-grid">${sheet.rows.slice(0,4).map(([label,value])=>`<div class="direction-item"><b>${esc(label)}</b><span>${esc(value)}</span></div>`).join('')}</div><details class="direction-more"><summary>연기·컬러·금지 포함 전체 기준서 보기</summary><pre>${esc(sheet.markdown)}</pre></details></section>`;
+}
+function gateRows(checks){return checks.map(x=>`<div class="gate-row ${x.status.toLowerCase()}"><span class="gate-mark">${x.status==='PASS'?'✓':x.status==='WARN'?'!':'×'}</span><b>${esc(x.label)}</b><span>${esc(x.detail)}</span></div>`).join('')}
+function seedanceSkillBindingView(){const ready=seedanceSkillReady(),failed=(seedanceSkillPolicy?.rule_checks||[]).filter(x=>x.status!=='PASS').length,detail=ready?`필수 파일 ${seedanceSkillPolicy.loaded_file_count}/${seedanceSkillPolicy.required_file_count} · 규칙 ${seedanceSkillPolicy.rule_checks?.length||0}개 검사 통과`:`누락 ${seedanceSkillPolicy?.missing_files?.length||0} · 규칙 실패 ${failed}`;return `<section class="skill-lock ${ready?'':'blocked'}"><div><strong>${ready?'씨댄스 스킬 강제 적용':'SKILL_GATE_BLOCKED'}</strong><small>FilmMate의 모든 영상 프롬프트 · ${esc(detail)}</small></div><div class="row">${ready?`<span class="skill-hash">#${esc(seedanceSkillPolicy.short_hash)}</span>`:''}<button class="btn" id="reloadSeedanceSkill">스킬 새로고침</button></div></section>`}
+function blockGateView(){
+  const qa=currentPromptQa(),issues=qa.checks.filter(x=>x.status!=='PASS'),summary=qa.status==='PASS'?`${qa.counts.pass}개 항목 통과`:`실패 ${qa.counts.fail} · 경고 ${qa.counts.warn}`,label=aiDraft.unitType==='block'?'블록 검사':'컷 프롬프트 검사';
+  return `<section class="block-gate"><div class="gate-head"><div><strong>${label}</strong><small>복사·저장 전 스킬 원본·정본·에셋·프롬프트 자동 검사</small></div><div class="row"><span class="gate-badge ${qa.status.toLowerCase()}">${qa.status} · ${summary}</span><button class="btn" id="rerunBlockScan">다시 검사</button></div></div>${issues.length?`<div class="gate-issues">${gateRows(issues)}</div>`:'<div class="gate-issues"><div class="gate-row pass"><span class="gate-mark">✓</span><b>복사·저장 가능</b><span>seedance-prompt-rules와 현재 정본을 기준으로 실패 없음.</span></div></div>'}<details class="gate-details"><summary>전체 ${qa.checks.length}개 항목 보기</summary><div class="gate-issues">${gateRows(qa.checks)}</div></details></section>`;
+}
+const promptLibraryViewBeforeDirectionGate=promptLibraryView;
+promptLibraryView=(canonical)=>{
+  let html=promptLibraryViewBeforeDirectionGate(canonical);
+  html=html.replace('<section class="slot">',`${seedanceSkillBindingView()}${directionSheetView()}${blockGateView()}<section class="slot">`);
+  if(!seedanceSkillReady())html=html.replace('<textarea id="aiPrompt"','<textarea id="aiPrompt" disabled');
+  return html;
+};
+function promptCharacterMetrics(text=aiDraft.prompt){const value=String(text??'');return{total:Array.from(value).length,withoutWhitespace:Array.from(value.replace(/\s/gu,'')).length}}
+function promptCharacterCountText(text=aiDraft.prompt){const count=promptCharacterMetrics(text);return `글자수 ${count.total.toLocaleString('ko-KR')}자 · 공백 제외 ${count.withoutWhitespace.toLocaleString('ko-KR')}자`}
+function updatePromptCharacterCount(text=aiDraft.prompt){const counter=$('promptCharCount');if(counter)counter.textContent=promptCharacterCountText(text)}
+const promptLibraryViewBeforeCharacterCount=promptLibraryView;
+promptLibraryView=(canonical)=>{
+  const html=promptLibraryViewBeforeCharacterCount(canonical);
+  return html.replace('</span></div><div class="field"><textarea id="aiPrompt"',` · <strong id="promptCharCount" class="prompt-count" aria-live="polite">${promptCharacterCountText()}</strong></span></div><div class="field"><textarea id="aiPrompt"`);
+};
+function buildGatedUploadPackConfig(){
+  const snapshot={model:aiDraft.model,unitType:aiDraft.unitType,targetId:aiDraft.targetId,items:[...(aiDraft.items||[])],uploads:[...(aiDraft.uploads||[])],prompt:aiDraft.prompt,combinedStoryboard:aiDraft.combinedStoryboard};
+  const payload=aiBlocks().map(block=>{
+    aiDraft.model=snapshot.model;aiDraft.unitType='block';aiDraft.targetId=block.block_id||block.id;aiDraft.items=uploadPackItems(block);aiDraft.combinedStoryboard=null;
+    const prompt=buildAiPrompt(),items=packageDisplayItems(),qa=scanSeedanceBlock(block,prompt,items),productionContract=productionDirectionSheet(block);
+    return{blockId:aiDraft.targetId,durationSec:block.duration_sec,shotIds:block.shot_ids||block.cut_ids||[],prompt,items:[...items],qa,productionContract,skillProvenance:seedanceSkillProvenance()};
+  });
+  aiDraft.model=snapshot.model;aiDraft.unitType=snapshot.unitType;aiDraft.targetId=snapshot.targetId;aiDraft.items=snapshot.items;aiDraft.uploads=snapshot.uploads;aiDraft.combinedStoryboard=snapshot.combinedStoryboard;aiDraft.prompt=snapshot.prompt||buildAiPrompt();
+  return{model:snapshot.model,blocks:payload,skillProvenance:seedanceSkillProvenance(),qa:{status:payload.some(x=>x.qa.status==='FAIL')?'FAIL':payload.some(x=>x.qa.status==='WARN')?'WARN':'PASS',blocks:payload.map(x=>({block_id:x.blockId,status:x.qa.status,counts:x.qa.counts}))}};
+}
+buildUploadPackConfig=buildGatedUploadPackConfig;
+const bindAiControlsBeforeDirectionGate=bindAiControls;
+bindAiControls=()=>{
+  bindAiControlsBeforeDirectionGate();
+  const reloadSkill=$('reloadSeedanceSkill');if(reloadSkill)reloadSkill.onclick=async()=>{seedanceSkillPolicy=await loadSeedanceSkillPolicy();aiDraft.prompt=buildAiPrompt();renderScene();toast(seedanceSkillReady()?`씨댄스 스킬 #${seedanceSkillPolicy.short_hash} 재적용`:'SKILL_GATE_BLOCKED · 스킬 원본 점검 필요')};
+  const copy=$('copyDirectionSheet');if(copy)copy.onclick=async()=>{await navigator.clipboard.writeText(productionDirectionSheet().markdown);toast('제작 기준서를 복사했습니다')};
+  const rerun=$('rerunBlockScan');if(rerun)rerun.onclick=()=>{const prompt=$('aiPrompt');if(prompt)aiDraft.prompt=prompt.value;const qa=currentPromptQa();renderScene();toast(qa.status==='PASS'?'프롬프트 검사 통과':`프롬프트 검사 ${qa.status} · 실패 ${qa.counts.fail} · 경고 ${qa.counts.warn}`)};
+  const copyPrompt=$('copyPrompt');if(copyPrompt)copyPrompt.onclick=async()=>{const prompt=$('aiPrompt');if(prompt)aiDraft.prompt=prompt.value;const qa=currentPromptQa(),first=qa.checks.find(x=>x.status==='FAIL');if(qa.status==='FAIL'){toast(`복사 차단 · ${first?.label}: ${first?.detail}`);return}await navigator.clipboard.writeText(aiDraft.prompt);toast(`seedance-prompt-rules #${seedanceSkillPolicy.short_hash} 통과 · 프롬프트 복사`)};
+  const save=$('saveBlockLibrary');if(save)save.onclick=async()=>{
+    if(aiDraft.unitType!=='block'){toast(`${modelBlockDurationSec()}초 블록을 먼저 선택하세요`);return}
+    const prompt=$('aiPrompt');if(prompt)aiDraft.prompt=prompt.value;
+    const items=packageDisplayItems(),qa=scanSeedanceBlock(activeAiBlock(),aiDraft.prompt,items);
+    if(qa.status==='FAIL'){const first=qa.checks.find(x=>x.status==='FAIL');toast(`저장 차단 · ${first?.label||'블록 검사'}: ${first?.detail||'오류'}`);return}
+    try{const out=await window.sceneFlow.saveBlockLibrary(selected.project,sceneId(selected),{...aiDraft,items,shotIds:currentShotIds(),conhapDir:activeConhapDir(),qa,productionContract:productionDirectionSheet(),skillProvenance:seedanceSkillProvenance()});toast(`블록 라이브러리 v${String(out.version).padStart(3,'0')} 저장·열기 완료`)}catch(e){toast('블록 라이브러리 저장 실패: '+e.message)}
+  };
+  const savePack=$('saveUploadPack');if(savePack)savePack.onclick=async()=>{
+    const config=buildGatedUploadPackConfig(),failed=config.blocks.filter(x=>x.qa.status==='FAIL');
+    if(failed.length){toast(`전체 묶음 차단 · ${failed.map(x=>x.blockId).join(', ')} 검사 실패`);return}
+    try{const out=await window.sceneFlow.saveUploadPack(selected.project,sceneId(selected),config);toast(`${out.blockCount}개 블록·${out.imageCount}개 이미지·검사 보고서를 저장했습니다`)}catch(e){toast('업로드 묶음 생성 실패: '+e.message)}
+  };
+  const legacyExport=$('exportPackage');if(legacyExport)legacyExport.onclick=async()=>{const prompt=$('aiPrompt');if(prompt)aiDraft.prompt=prompt.value;const qa=currentPromptQa(),first=qa.checks.find(x=>x.status==='FAIL');if(qa.status==='FAIL'){toast(`프리뷰 차단 · ${first?.label}: ${first?.detail}`);return}try{const out=await window.sceneFlow.exportAiPackage(selected.project,sceneId(selected),{...aiDraft,items:packageDisplayItems(),shotIds:currentShotIds(),qa,skillProvenance:seedanceSkillProvenance()});toast(`${aiDraft.unitType==='block'?'블록':'컷'} 패키지 v${String(out.version).padStart(3,'0')} 생성 완료`)}catch(e){toast('패키지 생성 실패: '+e.message)}};
+};
+const bindAiControlsBeforeCharacterCount=bindAiControls;
+bindAiControls=()=>{
+  bindAiControlsBeforeCharacterCount();
+  const prompt=$('aiPrompt');
+  if(prompt){prompt.addEventListener('input',()=>updatePromptCharacterCount(prompt.value));updatePromptCharacterCount(prompt.value)}
+};
+</script>
+<script src="seedance-facs.js"></script>
+<script src="prompt-languages.js"></script>
+<script src="workspace-ui.js"></script>
+<script src="micro-shot-ui.js"></script>
+</body></html>
