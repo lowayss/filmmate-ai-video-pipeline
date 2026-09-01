@@ -86,7 +86,7 @@ def checkpoint(projection: dict[str, Any], state: dict[str, Any]) -> dict[str, A
     return {"token": hashlib.sha256(encoded).hexdigest(), "basis": basis}
 
 
-def _stage_blockers(state: dict[str, Any], target: str) -> list[dict[str, Any]]:
+def _stage_blockers(state: dict[str, Any], target: str, stale_plan: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     if target == TARGET_STALE_CLEAR:
         return [
             {
@@ -96,9 +96,9 @@ def _stage_blockers(state: dict[str, Any], target: str) -> list[dict[str, Any]]:
                 "action": "regenerate_from_current_inputs",
                 "reasons": item.get("reasons") or [],
                 "entity_ids": [item.get("entity_id")] if item.get("entity_id") else [],
-                "expected_revision_id": item.get("revision_id"),
+                "expected_revision_id": item.get("expected_revision_id"),
             }
-            for item in (state.get("stale_objects") or [])
+            for item in ((stale_plan or {}).get("tasks") or [])
         ]
     blockers = [dict(item) for item in (state.get("blockers") or [])]
     if target == TARGET_HANDOFF_READY:
@@ -179,7 +179,8 @@ def build_plan(
     resolved_target = infer_target(goal, target)
     state = production_commands.build_scene_state(projection, scene_aliases)
     cp = checkpoint(projection, state)
-    blockers = _stage_blockers(state, resolved_target)
+    stale_plan = production_commands.stale_regeneration_plan(projection, scene_aliases) if resolved_target == TARGET_STALE_CLEAR else None
+    blockers = _stage_blockers(state, resolved_target, stale_plan)
     blockers.sort(key=lambda item: (STAGE_RANK.get(item.get("stage"), 99), str(item.get("entity_ids") or "")))
     steps = []
     for index, blocker in enumerate(blockers, start=1):
