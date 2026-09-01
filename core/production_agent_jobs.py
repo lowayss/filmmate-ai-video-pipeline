@@ -106,9 +106,28 @@ def _claim_expired(row, *, now: datetime, lease_seconds: int) -> bool:
     return (now - claimed_at).total_seconds() >= max(30, int(lease_seconds or DEFAULT_CLAIM_LEASE_SECONDS))
 
 
+def _expire_claim_row(db, row, actor: str, *, lease_seconds: int) -> bool:
+    base = _base_task_state({"status": row["plan_status"]})
+    now = hap_core.now()
+    cursor = db.execute(
+        "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error='claim_lease_expired',updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
+        (base, now, row["task_id"], row["claim_token"]),
+    )
+    if cursor.rowcount != 1:
+        return False
+    _event(
+        db,
+        row["run_id"],
+        "task_claim_expired",
+        actor,
+        {"claim_actor": row["claim_actor"], "claimed_at": row["claimed_at"], "lease_seconds": max(30, int(lease_seconds or DEFAULT_CLAIM_LEASE_SECONDS))},
+        row["task_id"],
+    )
+    return True
+
+
 def _recover_expired_claims(db, run_id: str, actor: str, *, lease_seconds: int = DEFAULT_CLAIM_LEASE_SECONDS) -> int:
     now_dt = datetime.now(timezone.utc)
-    now = hap_core.now()
     recovered = 0
     rows = db.execute(
         "SELECT * FROM production_agent_tasks WHERE run_id=? AND state='CLAIMED' ORDER BY ordinal,created_at",
@@ -117,22 +136,8 @@ def _recover_expired_claims(db, run_id: str, actor: str, *, lease_seconds: int =
     for row in rows:
         if not _claim_expired(row, now=now_dt, lease_seconds=lease_seconds):
             continue
-        base = _base_task_state({"status": row["plan_status"]})
-        cursor = db.execute(
-            "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error='claim_lease_expired',updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
-            (base, now, row["task_id"], row["claim_token"]),
-        )
-        if cursor.rowcount != 1:
-            continue
-        recovered += 1
-        _event(
-            db,
-            run_id,
-            "task_claim_expired",
-            actor,
-            {"claim_actor": row["claim_actor"], "claimed_at": row["claimed_at"], "lease_seconds": max(30, int(lease_seconds or DEFAULT_CLAIM_LEASE_SECONDS))},
-            row["task_id"],
-        )
+        if _expire_claim_row(db, row, actor, lease_seconds=lease_seconds):
+            recovered += 1
     return recovered
 
 
@@ -454,7 +459,8 @@ def heartbeat_claim(root: Path, run_id: str, task_id: str, claim_token: str, *, 
         if task["state"] != "CLAIMED" or task["claim_token"] != claim_token:
             raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID")
         if _claim_expired(task, now=datetime.now(timezone.utc), lease_seconds=claim_lease_seconds):
-            raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID:EXPIRED")
+            _expire_claim_row(db, task, actor, lease_seconds=claim_lease_seconds)
+            _commit_claim_rejection(db, "E_PRODUCTION_AGENT_TASK_CLAIM_INVALID:EXPIRED")
         now = hap_core.now()
         cursor = db.execute(
             "UPDATE production_agent_tasks SET claimed_at=?,updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",

@@ -179,7 +179,7 @@ class ProductionAgentJobTests(unittest.TestCase):
         refreshed_task = next(item for item in refreshed["tasks"] if item["task_id"] == task["task_id"])
         self.assertEqual(refreshed_task["state"], "CLAIMED")
 
-    def test_expired_claim_heartbeat_cannot_revive_lease(self):
+    def test_expired_claim_heartbeat_recovers_queue_immediately(self):
         run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
         claimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
         task = claimed["task"]
@@ -201,19 +201,27 @@ class ProductionAgentJobTests(unittest.TestCase):
             )
         db = hap_core.connect(self.root)
         try:
-            persisted = db.execute("SELECT state,claim_token,claimed_at FROM production_agent_tasks WHERE task_id=?", (task["task_id"],)).fetchone()
+            persisted = db.execute(
+                "SELECT state,claim_token,claim_checkpoint,claimed_at,last_error FROM production_agent_tasks WHERE task_id=?",
+                (task["task_id"],),
+            ).fetchone()
+            event = db.execute(
+                "SELECT event,detail_json FROM production_agent_events WHERE run_id=? AND task_id=? ORDER BY event_id DESC LIMIT 1",
+                (run["run_id"], task["task_id"]),
+            ).fetchone()
         finally:
             db.close()
-        self.assertEqual(persisted["state"], "CLAIMED")
-        self.assertEqual(persisted["claim_token"], task["claim_token"])
-        self.assertEqual(persisted["claimed_at"], expired_at)
-        refreshed = production_agent_jobs.refresh_run(
-            self.root, run["run_id"], self.projection(), ["S1"], claim_lease_seconds=30
+        self.assertEqual(persisted["state"], "PENDING")
+        self.assertIsNone(persisted["claim_token"])
+        self.assertIsNone(persisted["claim_checkpoint"])
+        self.assertIsNone(persisted["claimed_at"])
+        self.assertEqual(persisted["last_error"], "claim_lease_expired")
+        self.assertEqual(event["event"], "task_claim_expired")
+        reclaimed = production_agent_jobs.claim_next(
+            self.root, run["run_id"], self.projection(), ["S1"], actor="worker-b", claim_lease_seconds=30
         )
-        refreshed_task = next(item for item in refreshed["tasks"] if item["task_id"] == task["task_id"])
-        self.assertEqual(refreshed_task["state"], "PENDING")
-        self.assertIsNone(refreshed_task["claim_token"])
-        self.assertEqual(refreshed_task["last_error"], "claim_lease_expired")
+        self.assertEqual(reclaimed["task"]["state"], "CLAIMED")
+        self.assertNotEqual(reclaimed["task"]["claim_token"], task["claim_token"])
 
 
 if __name__ == "__main__":
