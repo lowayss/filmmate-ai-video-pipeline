@@ -1,12 +1,13 @@
 import sqlite3
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from core import filmmate_documents, production_agent_claim_guard, production_commands
+from core import filmmate_documents, production_agent_claim_guard, production_agent_jobs, production_commands
 
 
 class ProductionAgentClaimGuardTests(unittest.TestCase):
-    def database(self):
+    def database(self, claimed_at=None):
         db = sqlite3.connect(":memory:")
         db.row_factory = sqlite3.Row
         db.executescript("""
@@ -16,13 +17,24 @@ class ProductionAgentClaimGuardTests(unittest.TestCase):
         );
         CREATE TABLE production_agent_tasks(
           task_id TEXT PRIMARY KEY,run_id TEXT NOT NULL,state TEXT NOT NULL,
-          claim_token TEXT,claim_checkpoint TEXT
+          claim_token TEXT,claim_checkpoint TEXT,claimed_at TEXT
         );
-        INSERT INTO production_agent_runs(run_id,state,checkpoint,paused,cancelled)
-        VALUES('run:1','READY','cp:1',0,0);
-        INSERT INTO production_agent_tasks(task_id,run_id,state,claim_token,claim_checkpoint)
-        VALUES('task:1','run:1','CLAIMED','token:1','cp:1');
         """)
+        db.execute(
+            "INSERT INTO production_agent_runs(run_id,state,checkpoint,paused,cancelled) VALUES(?,?,?,?,?)",
+            ("run:1", "READY", "cp:1", 0, 0),
+        )
+        db.execute(
+            "INSERT INTO production_agent_tasks(task_id,run_id,state,claim_token,claim_checkpoint,claimed_at) VALUES(?,?,?,?,?,?)",
+            (
+                "task:1",
+                "run:1",
+                "CLAIMED",
+                "token:1",
+                "cp:1",
+                claimed_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            ),
+        )
         return db
 
     def guard(self):
@@ -40,6 +52,10 @@ class ProductionAgentClaimGuardTests(unittest.TestCase):
             self.assertEqual(row["task_state"], "CLAIMED")
         finally:
             db.close()
+
+    def test_guard_lease_matches_queue_default(self):
+        self.assertEqual(production_agent_claim_guard.DEFAULT_CLAIM_LEASE_SECONDS, production_agent_jobs.DEFAULT_CLAIM_LEASE_SECONDS)
+        self.assertEqual(production_agent_claim_guard.DEFAULT_CLAIM_LEASE_SECONDS, 300)
 
     def test_pause_or_revoked_token_blocks_semantic_write(self):
         db = self.database()
@@ -59,6 +75,21 @@ class ProductionAgentClaimGuardTests(unittest.TestCase):
         try:
             db.execute("UPDATE production_agent_runs SET checkpoint='cp:2' WHERE run_id='run:1'")
             with self.assertRaisesRegex(ValueError, "CLAIM_CHECKPOINT_CHANGED"):
+                production_agent_claim_guard.assert_active_claim(db, self.guard())
+        finally:
+            db.close()
+
+    def test_expired_or_missing_lease_blocks_semantic_write(self):
+        expired = (
+            datetime.now(timezone.utc)
+            - timedelta(seconds=production_agent_claim_guard.DEFAULT_CLAIM_LEASE_SECONDS + 1)
+        ).replace(microsecond=0).isoformat()
+        db = self.database(expired)
+        try:
+            with self.assertRaisesRegex(ValueError, "TASK_CLAIM_INVALID:EXPIRED"):
+                production_agent_claim_guard.assert_active_claim(db, self.guard())
+            db.execute("UPDATE production_agent_tasks SET claimed_at=NULL WHERE task_id='task:1'")
+            with self.assertRaisesRegex(ValueError, "TASK_CLAIM_INVALID:EXPIRED"):
                 production_agent_claim_guard.assert_active_claim(db, self.guard())
         finally:
             db.close()
