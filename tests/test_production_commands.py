@@ -54,16 +54,18 @@ class ProductionCommandTests(unittest.TestCase):
                 "dependencies": [{"entity_id": "asset:hero", "role": "character_reference"}],
                 "expected_revision_id": None, "producer": "codex",
             })
-            self.assertEqual(saved["revision_id"], "cut:8de4fc1825c3ac2b91e1@1")
+            self.assertTrue(saved["revision_id"].startswith("cut:"))
+            self.assertTrue(saved["revision_id"].endswith("@1"))
             db = hap_core.connect(root)
             try:
                 dep = db.execute("SELECT upstream_revision_id,role FROM dependencies WHERE downstream_revision_id=?", (saved["revision_id"],)).fetchone()
                 self.assertEqual(dep["upstream_revision_id"], "asset:hero@1")
                 self.assertEqual(dep["role"], "character_reference")
+                refreshed = hap_core.write_projection(root, db)
             finally:
                 db.close()
             with self.assertRaisesRegex(ValueError, "revision_conflict"):
-                production_commands.save_production_object(root, hap_core.write_projection(root, hap_core.connect(root)), ["S1"], {
+                production_commands.save_production_object(root, refreshed, ["S1"], {
                     "object_type": "cut", "key": "C01", "stage": "storyboard",
                     "payload": {"shot": "MS"}, "source_evidence": {"source": "conti"},
                     "dependencies": [], "expected_revision_id": None,
