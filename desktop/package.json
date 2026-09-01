@@ -15,6 +15,7 @@
       "main.cjs",
       "project-paths.cjs",
       "python-bridge.cjs",
+      "production-state.cjs",
       "preload.cjs",
       "index.html",
       "seedance-facs.js",

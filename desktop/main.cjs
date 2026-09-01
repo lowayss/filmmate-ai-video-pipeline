@@ -17,6 +17,7 @@ const {
 const {startCodexPromptJob, cancelCodexPromptJob} = require("./codex-worker.cjs");
 const {createProjectPathResolver} = require("./project-paths.cjs");
 const {createPythonBridge} = require("./python-bridge.cjs");
+const {buildSceneProductionState} = require("./production-state.cjs");
 
 const DOCUMENT_WORKSPACE = path.join(app.getPath("documents"), "영화작업용", "scene-package-builder");
 const ROOT = fs.existsSync(DOCUMENT_WORKSPACE) ? DOCUMENT_WORKSPACE : path.resolve(__dirname, "..");
@@ -143,6 +144,8 @@ function readProjects() {
             const hasArtifactRole = role => (artifacts?.artifacts || []).some(a => a.role === role);
             const sceneEntity = hapProjection?.entities?.find(entity => entity.entity_type === "scene" && (entity.logical_key === manifest.scene_id || entity.logical_key === scene.name));
             const childEntities = sceneEntity ? (hapProjection.entities || []).filter(entity => entity.parent_id === sceneEntity.entity_id) : [];
+            const scenePromptJobs = (hapProjection?.prompt_jobs || []).filter(job => job.scene_key === manifest.scene_id || job.scene_key === scene.name);
+            const production = sceneEntity ? buildSceneProductionState({sceneEntity, childEntities, promptJobs:scenePromptJobs}) : null;
             const aggregate = (types, empty = "pending") => {
               const values = childEntities.filter(entity => types.includes(entity.entity_type));
               if (!values.length) return empty;
@@ -177,7 +180,8 @@ function readProjects() {
               scene_duration: breakdown?.duration_sec ? `${breakdown.duration_sec}s` : manifest.scene_duration,
               project: entry.name,
               path: sceneDir,
-              progress: stages.length ? Math.round(done / stages.length * 100) : 0,
+              production,
+              progress: production?.progress ?? (stages.length ? Math.round(done / stages.length * 100) : 0),
               state_source: sceneEntity ? "hap-v2" : "legacy-evidence-only",
             };
           }).filter(Boolean)
@@ -291,6 +295,8 @@ ipcMain.handle("scene:detail", async (_event, project, scene) => {
   const sourceText = documents.screenplay?.content ?? legacySourceText;
   const sceneEntity = (hapProjection?.entities || []).find(entity => entity.entity_type === "scene" && (entity.logical_key === manifest.scene_id || entity.logical_key === scene));
   const sceneChildren = sceneEntity ? (hapProjection.entities || []).filter(entity => entity.parent_id === sceneEntity.entity_id) : [];
+  const scenePromptJobs = (hapProjection?.prompt_jobs || []).filter(job => job.scene_key === manifest.scene_id || job.scene_key === scene);
+  const production = sceneEntity ? buildSceneProductionState({sceneEntity, childEntities:sceneChildren, promptJobs:scenePromptJobs}) : null;
   const assetLibrary = listSceneAssetLibrary(sceneDir, project, scene);
   const conhap = {
     dir: path.basename(preferredConhapDir),
@@ -316,12 +322,13 @@ ipcMain.handle("scene:detail", async (_event, project, scene) => {
     sourceText,
     documents,
     conhap,
+    production,
     hap:{
       schema_version:hapProjection?.schema_version || null,
       scene_revision_id:sceneEntity?.current_revision?.revision_id || null,
       conhap_entity_id:documents.conti?.entity_id || null,
       conhap_revision_id:documents.conti?.revision_id || null,
-      entities:sceneChildren.map(entity => ({entity_id:entity.entity_id,entity_type:entity.entity_type,logical_key:entity.logical_key,current_revision_id:entity.current_revision?.revision_id || null,state:entity.state})),
+      entities:sceneChildren.map(entity => ({entity_id:entity.entity_id,entity_type:entity.entity_type,logical_key:entity.logical_key,current_revision_id:entity.current_revision?.revision_id || null,state:entity.state,errors:entity.errors || [],dependencies:entity.dependencies || []})),
     },
     assetLibrary,
     artifacts: (artifacts?.artifacts || []).map(artifact => {
