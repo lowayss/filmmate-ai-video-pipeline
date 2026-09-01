@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from core import hap_core, production_orchestrator
 
 RUN_STATES = {"READY", "PAUSED", "WAITING_REVIEW", "WAITING_WORK", "BLOCKED", "COMPLETE", "CANCELLED", "FAILED"}
 TASK_STATES = {"PENDING", "CLAIMED", "WAITING_REVIEW", "WAITING_WORK", "BLOCKED", "COMPLETE", "FAILED"}
+DEFAULT_CLAIM_LEASE_SECONDS = 300
 
 DDL = """
 CREATE TABLE IF NOT EXISTS production_agent_runs(
@@ -81,6 +83,53 @@ def _event(db, run_id: str, event: str, actor: str, detail: dict[str, Any] | Non
         "INSERT INTO production_agent_events(run_id,task_id,event,actor,detail_json,created_at) VALUES(?,?,?,?,?,?)",
         (run_id, task_id, event, actor, _json(detail or {}), hap_core.now()),
     )
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value or ""))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _claim_expired(row, *, now: datetime, lease_seconds: int) -> bool:
+    claimed_at = _parse_timestamp(row["claimed_at"])
+    if claimed_at is None:
+        return True
+    return (now - claimed_at).total_seconds() >= max(30, int(lease_seconds or DEFAULT_CLAIM_LEASE_SECONDS))
+
+
+def _recover_expired_claims(db, run_id: str, actor: str, *, lease_seconds: int = DEFAULT_CLAIM_LEASE_SECONDS) -> int:
+    now_dt = datetime.now(timezone.utc)
+    now = hap_core.now()
+    recovered = 0
+    rows = db.execute(
+        "SELECT * FROM production_agent_tasks WHERE run_id=? AND state='CLAIMED' ORDER BY ordinal,created_at",
+        (run_id,),
+    ).fetchall()
+    for row in rows:
+        if not _claim_expired(row, now=now_dt, lease_seconds=lease_seconds):
+            continue
+        base = _base_task_state({"status": row["plan_status"]})
+        db.execute(
+            "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error='claim_lease_expired',updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
+            (base, now, row["task_id"], row["claim_token"]),
+        )
+        if db.execute("SELECT changes()").fetchone()[0] != 1:
+            continue
+        recovered += 1
+        _event(
+            db,
+            run_id,
+            "task_claim_expired",
+            actor,
+            {"claim_actor": row["claim_actor"], "claimed_at": row["claimed_at"], "lease_seconds": max(30, int(lease_seconds or DEFAULT_CLAIM_LEASE_SECONDS))},
+            row["task_id"],
+        )
+    return recovered
 
 
 def _task_signature(step: dict[str, Any]) -> str:
@@ -160,7 +209,7 @@ def _sync_tasks(db, run_row, plan: dict[str, Any], actor: str):
         if signature in desired_signatures:
             continue
         db.execute(
-            "UPDATE production_agent_tasks SET state='COMPLETE',claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,updated_at=? WHERE task_id=?",
+            "UPDATE production_agent_tasks SET state='COMPLETE',claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,updated_at=? WHERE task_id=?",
             (now, row["task_id"]),
         )
         _event(db, run_id, "task_resolved_from_canonical_state", actor, {"previous_checkpoint": run_row["checkpoint"], "checkpoint": plan.get("checkpoint")}, row["task_id"])
@@ -207,6 +256,7 @@ def _task_dict(row):
         "claim_actor": row["claim_actor"],
         "claim_token": row["claim_token"],
         "claim_checkpoint": row["claim_checkpoint"],
+        "claimed_at": row["claimed_at"],
         "last_error": row["last_error"],
         "updated_at": row["updated_at"],
     }
@@ -262,7 +312,7 @@ def start_run(root: Path, projection: dict[str, Any], scene_aliases, *, goal: st
         db.close()
 
 
-def refresh_run(root: Path, run_id: str, projection: dict[str, Any], scene_aliases, *, actor: str = "codex"):
+def refresh_run(root: Path, run_id: str, projection: dict[str, Any], scene_aliases, *, actor: str = "codex", claim_lease_seconds: int = DEFAULT_CLAIM_LEASE_SECONDS):
     db = _connect(root)
     try:
         run = _run_row(db, run_id)
@@ -270,6 +320,7 @@ def refresh_run(root: Path, run_id: str, projection: dict[str, Any], scene_alias
             projection, scene_aliases, goal=run["goal"], target=run["target"], previous_checkpoint=run["checkpoint"]
         )
         _sync_tasks(db, run, plan, actor)
+        _recover_expired_claims(db, run_id, actor, lease_seconds=claim_lease_seconds)
         state = _run_state(plan, paused=bool(run["paused"]), cancelled=bool(run["cancelled"]))
         failed = db.execute("SELECT 1 FROM production_agent_tasks WHERE run_id=? AND state='FAILED' LIMIT 1", (run_id,)).fetchone()
         if failed is not None and not run["paused"] and not run["cancelled"]:
@@ -292,8 +343,8 @@ def refresh_run(root: Path, run_id: str, projection: dict[str, Any], scene_alias
         db.close()
 
 
-def claim_next(root: Path, run_id: str, projection: dict[str, Any], scene_aliases, *, actor: str = "codex-worker"):
-    refreshed = refresh_run(root, run_id, projection, scene_aliases, actor=actor)
+def claim_next(root: Path, run_id: str, projection: dict[str, Any], scene_aliases, *, actor: str = "codex-worker", claim_lease_seconds: int = DEFAULT_CLAIM_LEASE_SECONDS):
+    refreshed = refresh_run(root, run_id, projection, scene_aliases, actor=actor, claim_lease_seconds=claim_lease_seconds)
     if refreshed["state"] != "READY":
         raise ValueError(f"E_PRODUCTION_AGENT_RUN_NOT_CLAIMABLE:{refreshed['state']}")
     db = _connect(root)
@@ -317,7 +368,7 @@ def claim_next(root: Path, run_id: str, projection: dict[str, Any], scene_aliase
         token = hap_core.new_id("agent_claim", f"{run_id}|{task['task_id']}|{actor}")
         now = hap_core.now()
         cursor = db.execute(
-            "UPDATE production_agent_tasks SET state='CLAIMED',claim_actor=?,claim_token=?,claim_checkpoint=?,claimed_at=?,updated_at=? WHERE task_id=? AND state='PENDING'",
+            "UPDATE production_agent_tasks SET state='CLAIMED',claim_actor=?,claim_token=?,claim_checkpoint=?,claimed_at=?,last_error=NULL,updated_at=? WHERE task_id=? AND state='PENDING'",
             (actor, token, run["checkpoint"], now, now, task["task_id"]),
         )
         if cursor.rowcount != 1:
@@ -326,6 +377,32 @@ def claim_next(root: Path, run_id: str, projection: dict[str, Any], scene_aliase
         db.commit()
         claimed = _task_row(db, run_id, task["task_id"])
         return {"run_id": run_id, "checkpoint": run["checkpoint"], "task": _task_dict(claimed)}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def heartbeat_claim(root: Path, run_id: str, task_id: str, claim_token: str, *, actor: str = "codex-worker"):
+    db = _connect(root)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        run = _run_row(db, run_id)
+        if run["cancelled"]:
+            raise ValueError("E_PRODUCTION_AGENT_RUN_CANCELLED")
+        task = _task_row(db, run_id, task_id)
+        if task["state"] != "CLAIMED" or task["claim_token"] != claim_token:
+            raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID")
+        now = hap_core.now()
+        cursor = db.execute(
+            "UPDATE production_agent_tasks SET claimed_at=?,updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
+            (now, now, task_id, claim_token),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_RACE")
+        db.commit()
+        return {"run_id": run_id, "task": _task_dict(_task_row(db, run_id, task_id)), "heartbeat_at": now}
     except Exception:
         db.rollback()
         raise
@@ -367,7 +444,7 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
                 raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID")
             base = _base_task_state({"status": task["plan_status"]})
             db.execute(
-                "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,last_error=?,updated_at=? WHERE task_id=?",
+                "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error=?,updated_at=? WHERE task_id=?",
                 (base, error, now, task_id),
             )
             _event(db, run_id, "task_released", actor, {"error": error}, task_id)
@@ -377,7 +454,10 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
             task = _task_row(db, run_id, task_id)
             if task["state"] != "CLAIMED" or task["claim_token"] != claim_token:
                 raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID")
-            db.execute("UPDATE production_agent_tasks SET state='FAILED',last_error=?,updated_at=? WHERE task_id=?", (error or "task_failed", now, task_id))
+            db.execute(
+                "UPDATE production_agent_tasks SET state='FAILED',claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error=?,updated_at=? WHERE task_id=?",
+                (error or "task_failed", now, task_id),
+            )
             db.execute("UPDATE production_agent_runs SET state='FAILED',last_error=?,updated_at=? WHERE run_id=?", (error or "task_failed", now, run_id))
             _event(db, run_id, "task_failed", actor, {"error": error or "task_failed"}, task_id)
         elif action == "retry_task":
@@ -388,7 +468,7 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
                 raise ValueError("E_PRODUCTION_AGENT_TASK_NOT_FAILED")
             base = _base_task_state({"status": task["plan_status"]})
             db.execute(
-                "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,last_error=NULL,updated_at=? WHERE task_id=?",
+                "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error=NULL,updated_at=? WHERE task_id=?",
                 (base, now, task_id),
             )
             db.execute("UPDATE production_agent_runs SET state='READY',last_error=NULL,updated_at=? WHERE run_id=?", (now, run_id))
