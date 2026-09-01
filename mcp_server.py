@@ -21,7 +21,7 @@ from types import SimpleNamespace
 import package_compiler
 import scene_breakdown
 import workspace_compiler
-from core import filmmate_documents, hap_core, production_commands, prompt_ir, prompt_jobs
+from core import filmmate_documents, hap_core, production_commands, production_orchestrator, prompt_ir, prompt_jobs
 from package_compiler import compile_package
 from scene_breakdown import generate_breakdown
 from screenplay_analyzer import analyze_screenplay
@@ -445,6 +445,12 @@ def submit_filmmate_prompt_bundle(args):
 
 def call(name, args):
     try:
+        if name == "run_production_agent":
+            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_orchestrator.build_plan(
+                projection, aliases, goal=args.get("goal"), target=args.get("target"),
+                previous_checkpoint=args.get("previous_checkpoint"),
+            ))
         if name == "prepare_scene":
             _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
             return result(production_commands.prepare_scene(projection, aliases))
@@ -591,6 +597,21 @@ def call(name, args):
 
 
 SEMANTIC_TOOLS = [
+    {
+        "name": "run_production_agent",
+        "description": "Plan or resume a stateless Production Agent control loop from one natural-language goal. It re-reads canonical HAP state, returns the ordered steps and exact next semantic tool, and requires a fresh checkpoint after every write. It never invents completion or auto-approves creative work.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string"},
+                "scene": {"type": "string"},
+                "goal": {"type": "string"},
+                "target": {"type": "string", "enum": ["generate_ready", "handoff_ready", "stale_clear"]},
+                "previous_checkpoint": {"type": "string"}
+            },
+            "required": ["project", "scene", "goal"]
+        },
+    },
     {
         "name": "prepare_scene",
         "description": "Build a production-aware work plan for one scene. Returns Generate-ready status, blockers, stale objects, and ordered next actions without writing fake completion state.",
