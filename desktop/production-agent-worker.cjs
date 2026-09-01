@@ -5,6 +5,7 @@ const childProcess = require('node:child_process');
 
 const activeWorkers = new Map();
 const DEFAULT_MAX_STEPS = 12;
+const DEFAULT_CLAIM_HEARTBEAT_MS = 30000;
 
 function resourceFile(name) {
   const local = path.join(__dirname, name);
@@ -144,6 +145,33 @@ async function releaseClaim(bridge, basePayload, claim, reason) {
   } catch { /* Best-effort release. */ }
 }
 
+function startClaimHeartbeat(worker, claim) {
+  worker.heartbeatError = null;
+  const tick = async () => {
+    if (worker.cancelled || !worker.currentClaim || worker.heartbeatInFlight) return;
+    worker.heartbeatInFlight = true;
+    try {
+      await worker.bridge.runProductionAgentAsync({
+        ...worker.basePayload,
+        action: 'heartbeat_claim',
+        run_id: claim.run_id,
+        task_id: claim.task_id,
+        claim_token: claim.claim_token,
+        actor: 'codex-worker',
+      });
+      emit(worker.onEvent, {type: 'claim_heartbeat', run_id: claim.run_id, task_id: claim.task_id});
+    } catch (error) {
+      worker.heartbeatError = error;
+      emit(worker.onEvent, {type: 'claim_heartbeat_failed', run_id: claim.run_id, task_id: claim.task_id, error: String(error?.message || error)});
+    } finally {
+      worker.heartbeatInFlight = false;
+    }
+  };
+  const timer = setInterval(() => { void tick(); }, worker.heartbeatMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
 async function workerLoop(worker) {
   const {bridge, basePayload, projectDir, onEvent, spawn} = worker;
   try {
@@ -171,9 +199,11 @@ async function workerLoop(worker) {
         claim_token: workOrder.claim_token,
       };
       emit(onEvent, {type: 'claimed', run_id: worker.runId, task_id: workOrder.task_id, stage: workOrder.stage, tool: workOrder.suggested_tool});
+      const stopHeartbeat = startClaimHeartbeat(worker, worker.currentClaim);
       let proposal;
       try {
         proposal = await runCodexProposal({projectDir, workOrder, worker, spawn, onEvent});
+        if (worker.heartbeatError) throw worker.heartbeatError;
       } catch (error) {
         if (worker.cancelled) {
           await releaseClaim(bridge, basePayload, worker.currentClaim, 'worker_cancelled');
@@ -182,6 +212,8 @@ async function workerLoop(worker) {
         await failClaim(bridge, basePayload, worker.currentClaim, error);
         emit(onEvent, {type: 'failed', run_id: worker.runId, task_id: workOrder.task_id, error: String(error?.message || error)});
         return;
+      } finally {
+        stopHeartbeat();
       }
       if (worker.cancelled) {
         await releaseClaim(bridge, basePayload, worker.currentClaim, 'worker_cancelled');
@@ -229,7 +261,7 @@ async function workerLoop(worker) {
   }
 }
 
-function startProductionAgentWorker({projectDir, bridge, basePayload, runId, onEvent, maxSteps = DEFAULT_MAX_STEPS, spawn = childProcess.spawn}) {
+function startProductionAgentWorker({projectDir, bridge, basePayload, runId, onEvent, maxSteps = DEFAULT_MAX_STEPS, heartbeatMs = DEFAULT_CLAIM_HEARTBEAT_MS, spawn = childProcess.spawn}) {
   const id = String(runId || '');
   if (!id) throw new Error('E_PRODUCTION_AGENT_RUN_ID_REQUIRED');
   if (!bridge || typeof bridge.runProductionAgentAsync !== 'function') throw new Error('E_PRODUCTION_AGENT_BRIDGE_REQUIRED');
@@ -241,10 +273,13 @@ function startProductionAgentWorker({projectDir, bridge, basePayload, runId, onE
     basePayload: {...basePayload},
     onEvent,
     maxSteps: Math.max(1, Math.min(50, Number(maxSteps) || DEFAULT_MAX_STEPS)),
+    heartbeatMs: Math.max(1000, Number(heartbeatMs) || DEFAULT_CLAIM_HEARTBEAT_MS),
     spawn,
     cancelled: false,
     currentChild: null,
     currentClaim: null,
+    heartbeatError: null,
+    heartbeatInFlight: false,
   };
   activeWorkers.set(id, worker);
   emit(onEvent, {type: 'started', run_id: id});
@@ -274,6 +309,7 @@ function activeProductionAgentWorkers() {
 
 module.exports = {
   DEFAULT_MAX_STEPS,
+  DEFAULT_CLAIM_HEARTBEAT_MS,
   startProductionAgentWorker,
   cancelProductionAgentWorker,
   activeProductionAgentWorkers,
