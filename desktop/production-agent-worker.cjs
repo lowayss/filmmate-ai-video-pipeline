@@ -162,6 +162,7 @@ function startClaimHeartbeat(worker, claim) {
       emit(worker.onEvent, {type: 'claim_heartbeat', run_id: claim.run_id, task_id: claim.task_id});
     } catch (error) {
       worker.heartbeatError = error;
+      try { worker.currentChild?.kill('SIGTERM'); } catch { /* child already exited */ }
       emit(worker.onEvent, {type: 'claim_heartbeat_failed', run_id: claim.run_id, task_id: claim.task_id, error: String(error?.message || error)});
     } finally {
       worker.heartbeatInFlight = false;
@@ -207,6 +208,12 @@ async function workerLoop(worker) {
       } catch (error) {
         if (worker.cancelled) {
           await releaseClaim(bridge, basePayload, worker.currentClaim, 'worker_cancelled');
+          return;
+        }
+        if (worker.heartbeatError) {
+          await releaseClaim(bridge, basePayload, worker.currentClaim, 'claim_heartbeat_failed');
+          worker.currentClaim = null;
+          emit(onEvent, {type: 'stopped', run_id: worker.runId, reason: 'claim_heartbeat_failed', error: String(worker.heartbeatError?.message || worker.heartbeatError)});
           return;
         }
         await failClaim(bridge, basePayload, worker.currentClaim, error);
