@@ -35,6 +35,23 @@ test('control and stale-claim races are safe worker stops', () => {
   assert.equal(recoverableStopReason(new Error('E_PRODUCTION_AGENT_PROPOSAL_INVALID')), null);
 });
 
+test('canonical mutation races are safe worker stops, not failures', () => {
+  assert.equal(
+    recoverableStopReason(new Error('E_PRODUCTION_DEPENDENCY_CHANGED:asset:hero@1:asset:hero@2')),
+    'canonical_state_changed'
+  );
+  assert.equal(
+    recoverableStopReason(new Error('revision_conflict:cut:C01@3:cut:C01@4')),
+    'canonical_state_changed'
+  );
+  assert.equal(
+    recoverableStopReason(new Error('E_PRODUCTION_REVISION_SUPERSEDED')),
+    'canonical_state_changed'
+  );
+  assert.equal(recoverableStopReason(new Error('idempotency_conflict')), null);
+  assert.equal(recoverableStopReason(new Error('E_PRODUCTION_PAYLOAD_INVALID')), null);
+});
+
 test('worker failures preserve diagnostics', () => {
   const message = failureMessage(2, 'bad schema', '', '');
   assert.match(message, /E_PRODUCTION_AGENT_CODEX_EXIT_2/);
