@@ -52,17 +52,18 @@ class ProductionAgentJobTests(unittest.TestCase):
         self.assertEqual(claimed["task"]["state"], "CLAIMED")
         self.assertEqual(claimed["checkpoint"], run["checkpoint"])
 
-    def test_claim_rejection_keeps_refreshed_canonical_state(self):
+    def test_claim_rejection_keeps_refreshed_checkpoint(self):
         run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        production_agent_jobs.control_run(self.root, run["run_id"], "pause")
         changed = self.projection(storyboard_state="accepted")
-        with self.assertRaisesRegex(ValueError, "NOT_CLAIMABLE"):
+        with self.assertRaisesRegex(ValueError, "NOT_CLAIMABLE:PAUSED"):
             production_agent_jobs.claim_next(self.root, run["run_id"], changed, ["S1"], actor="worker-a")
         db = hap_core.connect(self.root)
         try:
             row = db.execute("SELECT state,checkpoint FROM production_agent_runs WHERE run_id=?", (run["run_id"],)).fetchone()
         finally:
             db.close()
-        self.assertEqual(row["state"], "WAITING_REVIEW" if row["state"] == "WAITING_REVIEW" else row["state"])
+        self.assertEqual(row["state"], "PAUSED")
         self.assertNotEqual(row["checkpoint"], run["checkpoint"])
 
     def test_repeated_start_run_creates_distinct_runs_and_latest_is_newest(self):
