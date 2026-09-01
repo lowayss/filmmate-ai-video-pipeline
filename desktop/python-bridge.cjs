@@ -120,7 +120,6 @@ function createPythonBridge(options = {}) {
         try { child.kill("SIGTERM"); } catch { /* best effort */ }
         fail(new Error(`E_BRIDGE_TIMEOUT:${perCallTimeout}`));
       }, perCallTimeout);
-      timer.unref?.();
 
       if (child.stdin) {
         child.stdin.on?.("error", () => {});
