@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from core import hap_core, production_agent_jobs, production_orchestrator
+from core import hap_core, production_agent_execution, production_agent_jobs, production_orchestrator
 
 
 def _context(payload):
@@ -22,6 +22,21 @@ def _context(payload):
     finally:
         db.close()
     return root, aliases, projection
+
+
+def _manual_work_order(task, reason):
+    if not task:
+        return None
+    return {
+        "schema_version": 1,
+        "task_id": task.get("task_id"),
+        "stage": task.get("stage"),
+        "status": task.get("plan_status"),
+        "suggested_tool": task.get("suggested_tool"),
+        "instruction": task.get("instruction"),
+        "mode": "manual",
+        "manual_reason": reason,
+    }
 
 
 def run(payload):
@@ -55,6 +70,37 @@ def run(payload):
     if action == "claim_task":
         return production_agent_jobs.claim_next(
             root, str(payload.get("run_id") or ""), projection, aliases, actor=str(payload.get("actor") or "codex-worker")
+        )
+    if action == "claim_work_order":
+        run_id = str(payload.get("run_id") or "")
+        peeked = production_agent_jobs.peek_next(root, run_id, projection, aliases, actor=str(payload.get("actor") or "codex-worker"))
+        task = peeked.get("task")
+        if not task:
+            return {"claimed": False, "run": peeked.get("run"), "work_order": None}
+        mode, reason = production_agent_execution.task_execution_mode(task)
+        if peeked.get("run", {}).get("state") != "READY" or mode != "proposal":
+            return {"claimed": False, "run": peeked.get("run"), "work_order": _manual_work_order(task, reason or peeked.get("run", {}).get("state"))}
+        claimed = production_agent_jobs.claim_next(root, run_id, projection, aliases, actor=str(payload.get("actor") or "codex-worker"))
+        task = claimed["task"]
+        work_order = production_agent_execution.build_work_order(
+            root,
+            projection,
+            aliases,
+            run_id=run_id,
+            task_id=task["task_id"],
+            claim_token=task["claim_token"],
+        )
+        return {"claimed": True, "run": peeked.get("run"), "work_order": work_order}
+    if action == "apply_worker_proposal":
+        return production_agent_execution.apply_proposal(
+            root,
+            projection,
+            aliases,
+            run_id=str(payload.get("run_id") or ""),
+            task_id=str(payload.get("task_id") or ""),
+            claim_token=str(payload.get("claim_token") or ""),
+            proposal=payload.get("proposal"),
+            actor=str(payload.get("actor") or "codex-worker"),
         )
     if action == "control_run":
         snapshot = production_agent_jobs.control_run(
