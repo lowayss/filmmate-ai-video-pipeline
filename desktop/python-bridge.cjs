@@ -160,10 +160,10 @@ function createPythonBridge(options = {}) {
     } catch {
       throw new Error(`E_PRODUCTION_AGENT_RESPONSE_INVALID:${String(output || "").trim().slice(0, 500)}`);
     }
-    if (!parsed || parsed.ok !== true || !parsed.plan) {
+    if (!parsed || parsed.ok !== true || !Object.prototype.hasOwnProperty.call(parsed, "result")) {
       throw new Error(parsed?.error || "production_agent_bridge_failed");
     }
-    return parsed.plan;
+    return parsed.result;
   }
 
   function runHap(_projectDir, args) {
