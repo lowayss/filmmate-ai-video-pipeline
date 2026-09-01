@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://filmmate.local/schemas/prompt-bundle-v3.json",
+  "title": "FilmMate Seedance prompt bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "engine", "prompt_ir", "prompt_variants"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 3},
+    "engine": {"type": "string", "minLength": 1},
+    "prompt_ir": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "project_id", "scene_id", "scope", "target_id", "input_mode", "model_profile", "duration_ms", "references", "timeline", "global_locks", "negative_constraints", "source_map"],
+      "properties": {
+        "schema_version": {"type": "integer", "const": 3},
+        "project_id": {"type": "string", "minLength": 1},
+        "scene_id": {"type": "string", "minLength": 1},
+        "scope": {"type": "string", "enum": ["shot", "block"]},
+        "target_id": {"type": "string", "minLength": 1},
+        "input_mode": {"type": "string", "enum": ["text_to_video", "reference_to_video"]},
+        "model_profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "verified_max_duration_ms"],
+          "properties": {
+            "name": {"type": "string", "minLength": 1},
+            "verified_max_duration_ms": {"type": ["integer", "null"]}
+          }
+        },
+        "duration_ms": {"type": "integer", "minimum": 1},
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["order", "tag", "role", "name", "path", "sha256", "source_revision", "use", "exclude", "provenance"],
+            "properties": {
+              "order": {"type": "integer", "minimum": 1},
+              "tag": {"type": "string", "minLength": 1},
+              "role": {"type": "string", "enum": ["storyboard", "character", "background", "location", "prop", "continuity_frame", "motion", "camera", "audio"]},
+              "name": {"type": "string", "minLength": 1},
+              "path": {"type": "string", "minLength": 1},
+              "sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+              "source_revision": {"type": "string"},
+              "use": {"type": "string", "minLength": 1},
+              "exclude": {"type": "string", "minLength": 1},
+              "provenance": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "timeline": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cut_id", "start_ms", "end_ms", "start_state", "central_action", "camera", "end_state", "audio", "performance"],
+            "properties": {
+              "cut_id": {"type": "string", "minLength": 1},
+              "start_ms": {"type": "integer", "minimum": 0},
+              "end_ms": {"type": "integer", "minimum": 1},
+              "start_state": {"type": "string", "minLength": 1},
+              "central_action": {"type": "string", "minLength": 1},
+              "camera": {"type": "string", "minLength": 1},
+              "end_state": {"type": "string", "minLength": 1},
+              "audio": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["dialogue", "sfx", "ambience", "music", "text", "lip_sync"],
+                "properties": {
+                  "dialogue": {"type": ["string", "null"]},
+                  "sfx": {"type": ["string", "null"]},
+                  "ambience": {"type": ["string", "null"]},
+                  "music": {"type": ["string", "null"]},
+                  "text": {"type": ["string", "null"]},
+                  "lip_sync": {"type": ["string", "null"]}
+                }
+              },
+              "performance": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "required": ["aus", "trigger", "observable_change", "recovery_state", "subtext", "tactic"],
+                "properties": {
+                  "aus": {"type": "array", "maxItems": 3, "items": {"type": "string", "minLength": 1}},
+                  "trigger": {"type": "string", "minLength": 1},
+                  "observable_change": {"type": "string", "minLength": 1},
+                  "recovery_state": {"type": "string", "minLength": 1},
+                  "subtext": {"type": "string"},
+                  "tactic": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "global_locks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["continuity", "character", "wardrobe", "space", "props", "camera", "audio", "text", "color"],
+          "properties": {
+            "continuity": {"type": ["string", "null"]},
+            "character": {"type": ["string", "null"]},
+            "wardrobe": {"type": ["string", "null"]},
+            "space": {"type": ["string", "null"]},
+            "props": {"type": ["string", "null"]},
+            "camera": {"type": ["string", "null"]},
+            "audio": {"type": ["string", "null"]},
+            "text": {"type": ["string", "null"]},
+            "color": {"type": ["string", "null"]}
+          }
+        },
+        "negative_constraints": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "source_map": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source", "target"],
+            "properties": {
+              "source": {"type": "string", "minLength": 1},
+              "target": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "prompt_variants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ko", "en", "zh"],
+      "properties": {
+        "ko": {"type": "string", "minLength": 1},
+        "en": {"type": "string", "minLength": 1},
+        "zh": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
