@@ -1,6 +1,7 @@
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from core import production_agent_execution
 
@@ -77,6 +78,54 @@ class ProductionAgentExecutionTests(unittest.TestCase):
             production_agent_execution.validate_proposal(work_order, {
                 "schema_version": 1, "decision": "needs_user_input", "tool": None, "args": {}, "reason": ""
             })
+
+    def test_apply_object_proposal_pins_dependency_revisions_and_uses_canonical_mutation(self):
+        work_order = {
+            "schema_version": 1,
+            "run_id": "run:1",
+            "task_id": "task:1",
+            "scene": "S1",
+            "claim_token": "claim:1",
+            "claim_checkpoint": "checkpoint:1",
+            "mode": "proposal",
+            "stage": "storyboard",
+            "suggested_tool": "save_production_object",
+            "target_entity": {"entity_type": "cut", "logical_key": "C01", "revision_id": "cut:C01@3"},
+            "upstream_dependencies": [
+                {"entity_id": "asset:hero", "role": "assets", "revision_id": "asset:hero@2"},
+                {"entity_id": "scene:S1", "role": "analysis", "revision_id": "scene:S1@1"},
+            ],
+        }
+        proposal = {
+            "schema_version": 1,
+            "decision": "execute",
+            "tool": "save_production_object",
+            "args": {"object_type": "cut", "key": "C01", "stage": "storyboard", "payload": {"shot": "CU"}},
+            "reason": None,
+        }
+        completed_run = {
+            "checkpoint": "checkpoint:2",
+            "tasks": [{"task_id": "task:1", "state": "COMPLETE"}],
+        }
+        with mock.patch.object(production_agent_execution, "build_work_order", return_value=work_order), \
+             mock.patch.object(production_agent_execution.production_commands, "save_production_object", return_value={"revision_id": "cut:C01@4"}) as save, \
+             mock.patch.object(production_agent_execution.production_agent_jobs, "refresh_run", return_value=completed_run) as refresh:
+            result = production_agent_execution.apply_proposal(
+                Path("/tmp/project"), None, ["S1"], run_id="run:1", task_id="task:1", claim_token="claim:1", proposal=proposal
+            )
+        self.assertTrue(result["resolved"])
+        args = save.call_args.args
+        request = args[3]
+        self.assertIsNone(args[1])
+        self.assertEqual(request["expected_revision_id"], "cut:C01@3")
+        self.assertEqual(
+            request["dependencies"],
+            [
+                {"entity_id": "asset:hero", "role": "assets", "revision_id": "asset:hero@2"},
+                {"entity_id": "scene:S1", "role": "analysis", "revision_id": "scene:S1@1"},
+            ],
+        )
+        self.assertIsNone(refresh.call_args.args[2])
 
     def test_desktop_schema_cannot_propose_approval(self):
         schema = json.loads((Path(__file__).parents[1] / "desktop" / "production-agent-action.schema.json").read_text(encoding="utf-8"))
