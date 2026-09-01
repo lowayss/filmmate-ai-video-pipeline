@@ -1,0 +1,32 @@
+from pathlib import Path
+
+path = Path("mcp_server.py")
+text = path.read_text(encoding="utf-8")
+
+replacements = [
+(
+"from core import filmmate_documents, hap_core, prompt_ir, prompt_jobs\n",
+"from core import filmmate_documents, hap_core, production_commands, prompt_ir, prompt_jobs\n",
+),
+(
+"def submit_filmmate_prompt_bundle(args):\n",
+'''def semantic_scene_context(project, scene):\n    root = require_hap(project)\n    target = scene_dir(project, scene)\n    manifest_file = target / "scene-data" / "scene-manifest.json"\n    manifest = json.loads(manifest_file.read_text(encoding="utf-8")) if manifest_file.is_file() else {}\n    aliases = [scene, target.name, manifest.get("scene_id")]\n    return root, regenerate_hap_projection(project), [item for item in aliases if item]\n\n\ndef submit_filmmate_prompt_bundle(args):\n''',
+),
+(
+'''    try:\n        if name == "list_scene_projects":\n''',
+'''    try:\n        if name == "prepare_scene":\n            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])\n            return result(production_commands.prepare_scene(projection, aliases))\n        if name == "get_generate_ready":\n            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])\n            return result(production_commands.build_scene_state(projection, aliases))\n        if name == "prepare_stale_regeneration":\n            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])\n            return result(production_commands.stale_regeneration_plan(projection, aliases))\n        if name == "save_production_object":\n            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])\n            saved = production_commands.save_production_object(root, projection, aliases, args)\n            refreshed = regenerate_hap_projection(args["project"])\n            return result({**saved, "production": production_commands.build_scene_state(refreshed, aliases)})\n        if name == "approve_production_object":\n            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])\n            approved = production_commands.approve_production_object(root, projection, aliases, args)\n            refreshed = regenerate_hap_projection(args["project"])\n            return result({**approved, "production": production_commands.build_scene_state(refreshed, aliases)})\n        if name == "list_scene_projects":\n''',
+),
+(
+"TOOLS = [\n",
+'''SEMANTIC_TOOLS = [\n    {\n        "name": "prepare_scene",\n        "description": "Build a production-aware work plan for one scene. Returns Generate-ready status, blockers, stale objects, and ordered next actions without writing fake completion state.",\n        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project", "scene"]},\n    },\n    {\n        "name": "get_generate_ready",\n        "description": "Read the canonical Production Object readiness model for one scene: Scene Analysis, Written Conti, References, Storyboard/Shots, Video Prompts, and optional Handoff Package.",\n        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project", "scene"]},\n    },\n    {\n        "name": "prepare_stale_regeneration",\n        "description": "Return an ordered regeneration plan for stale Production Objects, including the exact current revision that must be replaced. This plans regeneration; it does not claim new creative output exists.",\n        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project", "scene"]},\n    },\n    {\n        "name": "save_production_object",\n        "description": "Create or revise a semantic FilmMate Production Object under a scene. Dependencies are resolved to their latest canonical revisions automatically. expected_revision_id is required and must be null only when creating a new object.",\n        "inputSchema": {\n            "type": "object",\n            "properties": {\n                "project": {"type": "string"}, "scene": {"type": "string"},\n                "object_type": {"type": "string", "enum": ["beat", "cut", "block", "asset", "prompt", "package"]},\n                "key": {"type": "string"},\n                "stage": {"type": "string", "enum": ["conti", "assets", "storyboard", "prompts", "handoff"]},\n                "payload": {"type": "object"}, "source_evidence": {"type": "object"},\n                "dependencies": {\n                    "type": "array",\n                    "items": {"type": "object", "properties": {\n                        "entity_id": {"type": "string"}, "object_type": {"type": "string"}, "key": {"type": "string"}, "role": {"type": "string"}\n                    }}\n                },\n                "expected_revision_id": {"type": ["string", "null"]},\n                "idempotency_key": {"type": "string"}, "producer": {"type": "string"}\n            },\n            "required": ["project", "scene", "object_type", "key", "payload", "source_evidence", "expected_revision_id"]\n        },\n    },\n    {\n        "name": "approve_production_object",\n        "description": "Approve the current verified revision of a Production Object using an explicit delegated user-policy grant. Stale, blocked, unverified, or superseded revisions cannot be approved.",\n        "inputSchema": {\n            "type": "object",\n            "properties": {\n                "project": {"type": "string"}, "scene": {"type": "string"},\n                "entity_id": {"type": "string"}, "object_type": {"type": "string"}, "key": {"type": "string"},\n                "approver": {"type": "string"}, "evidence": {"type": "string"}, "delegated_grant_id": {"type": "string"}, "approval_id": {"type": "string"}\n            },\n            "required": ["project", "scene", "approver", "evidence", "delegated_grant_id"]\n        },\n    },\n]\n\nTOOLS = SEMANTIC_TOOLS + [\n''',
+),
+]
+
+for index, (old, new) in enumerate(replacements, start=1):
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"replacement {index} expected once, found {count}")
+    text = text.replace(old, new, 1)
+
+path.write_text(text, encoding="utf-8")
+print(f"applied {len(replacements)} semantic MCP replacements")
