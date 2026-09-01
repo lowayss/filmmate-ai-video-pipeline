@@ -13,6 +13,8 @@
     "productName": "FilmMate",
     "files": [
       "main.cjs",
+      "project-paths.cjs",
+      "python-bridge.cjs",
       "preload.cjs",
       "index.html",
       "seedance-facs.js",
