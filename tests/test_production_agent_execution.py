@@ -125,7 +125,56 @@ class ProductionAgentExecutionTests(unittest.TestCase):
                 {"entity_id": "scene:S1", "role": "analysis", "revision_id": "scene:S1@1"},
             ],
         )
+        self.assertEqual(request["claim_guard"], {
+            "run_id": "run:1", "task_id": "task:1", "claim_token": "claim:1", "claim_checkpoint": "checkpoint:1"
+        })
         self.assertIsNone(refresh.call_args.args[2])
+
+    def test_apply_conti_proposal_carries_claim_guard_into_document_transaction(self):
+        work_order = {
+            "schema_version": 1,
+            "run_id": "run:1",
+            "task_id": "task:1",
+            "scene": "S1",
+            "claim_token": "claim:1",
+            "claim_checkpoint": "checkpoint:1",
+            "mode": "proposal",
+            "stage": "conti",
+            "suggested_tool": "save_filmmate_document",
+            "target_entity": None,
+            "upstream_dependencies": [],
+            "documents": {
+                "scene": "S1",
+                "documents": {
+                    "screenplay": {"revision_id": "scene:S1@2"},
+                    "conti": {"revision_id": "block:S1_CONHAP@3"},
+                },
+            },
+        }
+        proposal = {
+            "schema_version": 1,
+            "decision": "execute",
+            "tool": "save_filmmate_document",
+            "args": {"kind": "conti", "content": "C01. 문이 열린다."},
+            "reason": None,
+        }
+        completed_run = {
+            "checkpoint": "checkpoint:2",
+            "tasks": [{"task_id": "task:1", "state": "COMPLETE"}],
+        }
+        with mock.patch.object(production_agent_execution, "build_work_order", return_value=work_order), \
+             mock.patch.object(production_agent_execution.filmmate_documents, "save_document", return_value={"revision_id": "block:S1_CONHAP@4"}) as save, \
+             mock.patch.object(production_agent_execution.production_agent_jobs, "refresh_run", return_value=completed_run):
+            result = production_agent_execution.apply_proposal(
+                Path("/tmp/project"), None, ["S1"], run_id="run:1", task_id="task:1", claim_token="claim:1", proposal=proposal
+            )
+        self.assertTrue(result["resolved"])
+        payload = save.call_args.args[0]
+        self.assertEqual(payload["expected_revision_id"], "block:S1_CONHAP@3")
+        self.assertEqual(payload["expected_scene_revision_id"], "scene:S1@2")
+        self.assertEqual(payload["claim_guard"], {
+            "run_id": "run:1", "task_id": "task:1", "claim_token": "claim:1", "claim_checkpoint": "checkpoint:1"
+        })
 
     def test_desktop_schema_cannot_propose_approval(self):
         schema = json.loads((Path(__file__).parents[1] / "desktop" / "production-agent-action.schema.json").read_text(encoding="utf-8"))
