@@ -26,4 +26,5 @@ contextBridge.exposeInMainWorld("sceneFlow", {
   composeBlockStoryboard: (project, scene, block, items) => ipcRenderer.invoke("storyboard:compose-block", project, scene, block, items),
   saveBlockStoryboard: (project, scene, block, dataUrl) => ipcRenderer.invoke("storyboard:save-composite", project, scene, block, dataUrl),
   exportAiPackage: (project, scene, config) => ipcRenderer.invoke("ai:export-package", project, scene, config),
+  runProductionAgent: (project, scene, request) => ipcRenderer.invoke("production-agent:run", project, scene, request),
 });

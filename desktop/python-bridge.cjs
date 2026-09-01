@@ -136,6 +136,10 @@ function createPythonBridge(options = {}) {
     return coreScriptPath("filmmate_documents.py");
   }
 
+  function productionAgentBridgePath() {
+    return coreScriptPath("production_agent_bridge.py");
+  }
+
   function parseDocumentResult(output) {
     let parsed;
     try {
@@ -147,6 +151,19 @@ function createPythonBridge(options = {}) {
       throw new Error(parsed?.error || "document_bridge_failed");
     }
     return parsed;
+  }
+
+  function parseProductionAgentResult(output) {
+    let parsed;
+    try {
+      parsed = JSON.parse(String(output || "").trim());
+    } catch {
+      throw new Error(`E_PRODUCTION_AGENT_RESPONSE_INVALID:${String(output || "").trim().slice(0, 500)}`);
+    }
+    if (!parsed || parsed.ok !== true || !parsed.plan) {
+      throw new Error(parsed?.error || "production_agent_bridge_failed");
+    }
+    return parsed.plan;
   }
 
   function runHap(_projectDir, args) {
@@ -172,17 +189,26 @@ function createPythonBridge(options = {}) {
     return parseDocumentResult(result.stdout);
   }
 
+  async function runProductionAgentAsync(payload) {
+    const result = await runPythonAsync(productionAgentBridgePath(), [], {
+      input: JSON.stringify(payload ?? {}),
+    });
+    return parseProductionAgentResult(result.stdout);
+  }
+
   return {
     pythonExecutable,
     coreScriptPath,
     hapScriptPath,
     documentBridgePath,
+    productionAgentBridgePath,
     runPython,
     runPythonAsync,
     runHap,
     runHapAsync,
     runDocumentBridge,
     runDocumentBridgeAsync,
+    runProductionAgentAsync,
   };
 }
 
