@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FilmMate Production Agent semantic action proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "decision", "tool", "args", "reason"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "decision": {"enum": ["execute", "needs_user_input"]},
+    "tool": {
+      "type": ["string", "null"],
+      "enum": ["save_filmmate_document", "save_production_object", null]
+    },
+    "args": {"type": "object"},
+    "reason": {"type": ["string", "null"]}
+  }
+}
