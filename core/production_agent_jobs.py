@@ -319,9 +319,11 @@ def start_run(root: Path, projection: dict[str, Any], scene_aliases, *, goal: st
     plan = production_orchestrator.build_plan(projection, scene_aliases, goal=goal, target=target)
     db = _connect(root)
     try:
+        db.execute("BEGIN IMMEDIATE")
         project_id = _project_id(db)
         now = hap_core.now()
-        run_id = hap_core.new_id("agent_run", f"{project_id}|{plan.get('scene')}|{plan.get('target')}|{goal or ''}")
+        creation_nonce = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        run_id = hap_core.new_id("agent_run", f"{project_id}|{plan.get('scene')}|{plan.get('target')}|{goal or ''}|{creation_nonce}")
         state = _run_state(plan)
         db.execute(
             "INSERT INTO production_agent_runs(run_id,project_id,scene_key,goal,target,state,checkpoint,actor,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -519,7 +521,7 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
 def latest_run(root: Path, scene_key: str):
     db = _connect(root)
     try:
-        row = db.execute("SELECT run_id FROM production_agent_runs WHERE scene_key=? ORDER BY created_at DESC LIMIT 1", (scene_key,)).fetchone()
+        row = db.execute("SELECT run_id FROM production_agent_runs WHERE scene_key=? ORDER BY created_at DESC,rowid DESC LIMIT 1", (scene_key,)).fetchone()
         return _snapshot(db, row["run_id"]) if row is not None else None
     finally:
         db.close()
