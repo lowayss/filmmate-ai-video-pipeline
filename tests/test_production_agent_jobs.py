@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from core import hap_core, production_agent_jobs
 
@@ -43,6 +44,27 @@ class ProductionAgentJobTests(unittest.TestCase):
         self.assertEqual(claimed["task"]["suggested_tool"], "save_production_object")
         self.assertTrue(claimed["task"]["claim_token"].startswith("agent_claim_"))
         self.assertIsNotNone(claimed["task"]["claimed_at"])
+
+    def test_claim_refresh_and_claim_share_one_transactional_path(self):
+        run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        with mock.patch.object(production_agent_jobs, "refresh_run", side_effect=AssertionError("claim_next must not call refresh_run")):
+            claimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
+        self.assertEqual(claimed["task"]["state"], "CLAIMED")
+        self.assertEqual(claimed["checkpoint"], run["checkpoint"])
+
+    def test_claim_rejection_keeps_refreshed_checkpoint(self):
+        run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        production_agent_jobs.control_run(self.root, run["run_id"], "pause")
+        changed = self.projection(storyboard_state="accepted")
+        with self.assertRaisesRegex(ValueError, "NOT_CLAIMABLE:PAUSED"):
+            production_agent_jobs.claim_next(self.root, run["run_id"], changed, ["S1"], actor="worker-a")
+        db = hap_core.connect(self.root)
+        try:
+            row = db.execute("SELECT state,checkpoint FROM production_agent_runs WHERE run_id=?", (run["run_id"],)).fetchone()
+        finally:
+            db.close()
+        self.assertEqual(row["state"], "PAUSED")
+        self.assertNotEqual(row["checkpoint"], run["checkpoint"])
 
     def test_repeated_start_run_creates_distinct_runs_and_latest_is_newest(self):
         first = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")

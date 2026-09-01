@@ -85,6 +85,10 @@ def _event(db, run_id: str, event: str, actor: str, detail: dict[str, Any] | Non
     )
 
 
+def _projection_for_plan(root: Path, db, projection: dict[str, Any] | None):
+    return projection if projection is not None else hap_core.write_projection(root, db)
+
+
 def _parse_timestamp(value: Any) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(str(value or ""))
@@ -315,11 +319,50 @@ def _snapshot(db, run_id: str, plan: dict[str, Any] | None = None):
     }
 
 
-def start_run(root: Path, projection: dict[str, Any], scene_aliases, *, goal: str | None = None, target: str | None = None, actor: str = "codex"):
-    plan = production_orchestrator.build_plan(projection, scene_aliases, goal=goal, target=target)
+def _refresh_locked(
+    root: Path,
+    db,
+    run_id: str,
+    projection: dict[str, Any] | None,
+    scene_aliases,
+    *,
+    actor: str,
+    claim_lease_seconds: int,
+):
+    run = _run_row(db, run_id)
+    current_projection = _projection_for_plan(root, db, projection)
+    plan = production_orchestrator.build_plan(
+        current_projection, scene_aliases, goal=run["goal"], target=run["target"], previous_checkpoint=run["checkpoint"]
+    )
+    _sync_tasks(db, run, plan, actor)
+    _recover_expired_claims(db, run_id, actor, lease_seconds=claim_lease_seconds)
+    state = _run_state(plan, paused=bool(run["paused"]), cancelled=bool(run["cancelled"]))
+    failed = db.execute("SELECT 1 FROM production_agent_tasks WHERE run_id=? AND state='FAILED' LIMIT 1", (run_id,)).fetchone()
+    if failed is not None and not run["paused"] and not run["cancelled"]:
+        state = "FAILED"
+    now = hap_core.now()
+    db.execute(
+        "UPDATE production_agent_runs SET state=?,checkpoint=?,updated_at=? WHERE run_id=?",
+        (state, plan["checkpoint"], now, run_id),
+    )
+    if plan.get("checkpoint_changed"):
+        _event(db, run_id, "canonical_checkpoint_changed", actor, {"from": run["checkpoint"], "to": plan["checkpoint"]})
+    if state == "COMPLETE" and run["state"] != "COMPLETE":
+        _event(db, run_id, "target_reached", actor, {"target": run["target"]})
+    return _run_row(db, run_id), plan
+
+
+def _commit_claim_rejection(db, message: str):
+    db.commit()
+    raise ValueError(message)
+
+
+def start_run(root: Path, projection: dict[str, Any] | None, scene_aliases, *, goal: str | None = None, target: str | None = None, actor: str = "codex"):
     db = _connect(root)
     try:
         db.execute("BEGIN IMMEDIATE")
+        current_projection = _projection_for_plan(root, db, projection)
+        plan = production_orchestrator.build_plan(current_projection, scene_aliases, goal=goal, target=target)
         project_id = _project_id(db)
         now = hap_core.now()
         creation_nonce = datetime.now(timezone.utc).isoformat(timespec="microseconds")
@@ -341,28 +384,13 @@ def start_run(root: Path, projection: dict[str, Any], scene_aliases, *, goal: st
         db.close()
 
 
-def refresh_run(root: Path, run_id: str, projection: dict[str, Any], scene_aliases, *, actor: str = "codex", claim_lease_seconds: int = DEFAULT_CLAIM_LEASE_SECONDS):
+def refresh_run(root: Path, run_id: str, projection: dict[str, Any] | None, scene_aliases, *, actor: str = "codex", claim_lease_seconds: int = DEFAULT_CLAIM_LEASE_SECONDS):
     db = _connect(root)
     try:
-        run = _run_row(db, run_id)
-        plan = production_orchestrator.build_plan(
-            projection, scene_aliases, goal=run["goal"], target=run["target"], previous_checkpoint=run["checkpoint"]
+        db.execute("BEGIN IMMEDIATE")
+        _, plan = _refresh_locked(
+            root, db, run_id, projection, scene_aliases, actor=actor, claim_lease_seconds=claim_lease_seconds
         )
-        _sync_tasks(db, run, plan, actor)
-        _recover_expired_claims(db, run_id, actor, lease_seconds=claim_lease_seconds)
-        state = _run_state(plan, paused=bool(run["paused"]), cancelled=bool(run["cancelled"]))
-        failed = db.execute("SELECT 1 FROM production_agent_tasks WHERE run_id=? AND state='FAILED' LIMIT 1", (run_id,)).fetchone()
-        if failed is not None and not run["paused"] and not run["cancelled"]:
-            state = "FAILED"
-        now = hap_core.now()
-        db.execute(
-            "UPDATE production_agent_runs SET state=?,checkpoint=?,updated_at=? WHERE run_id=?",
-            (state, plan["checkpoint"], now, run_id),
-        )
-        if plan.get("checkpoint_changed"):
-            _event(db, run_id, "canonical_checkpoint_changed", actor, {"from": run["checkpoint"], "to": plan["checkpoint"]})
-        if state == "COMPLETE" and run["state"] != "COMPLETE":
-            _event(db, run_id, "target_reached", actor, {"target": run["target"]})
         db.commit()
         return _snapshot(db, run_id, plan)
     except Exception:
@@ -372,28 +400,27 @@ def refresh_run(root: Path, run_id: str, projection: dict[str, Any], scene_alias
         db.close()
 
 
-def claim_next(root: Path, run_id: str, projection: dict[str, Any], scene_aliases, *, actor: str = "codex-worker", claim_lease_seconds: int = DEFAULT_CLAIM_LEASE_SECONDS):
-    refreshed = refresh_run(root, run_id, projection, scene_aliases, actor=actor, claim_lease_seconds=claim_lease_seconds)
-    if refreshed["state"] != "READY":
-        raise ValueError(f"E_PRODUCTION_AGENT_RUN_NOT_CLAIMABLE:{refreshed['state']}")
+def claim_next(root: Path, run_id: str, projection: dict[str, Any] | None, scene_aliases, *, actor: str = "codex-worker", claim_lease_seconds: int = DEFAULT_CLAIM_LEASE_SECONDS):
     db = _connect(root)
     try:
         db.execute("BEGIN IMMEDIATE")
-        run = _run_row(db, run_id)
+        run, _ = _refresh_locked(
+            root, db, run_id, projection, scene_aliases, actor=actor, claim_lease_seconds=claim_lease_seconds
+        )
         if run["paused"] or run["cancelled"] or run["state"] != "READY":
-            raise ValueError(f"E_PRODUCTION_AGENT_RUN_NOT_CLAIMABLE:{run['state']}")
+            _commit_claim_rejection(db, f"E_PRODUCTION_AGENT_RUN_NOT_CLAIMABLE:{run['state']}")
         task = db.execute(
             "SELECT * FROM production_agent_tasks WHERE run_id=? AND state NOT IN ('COMPLETE','FAILED') ORDER BY ordinal,created_at LIMIT 1",
             (run_id,),
         ).fetchone()
         if task is None:
-            raise ValueError("E_PRODUCTION_AGENT_NO_CLAIMABLE_TASK")
+            _commit_claim_rejection(db, "E_PRODUCTION_AGENT_NO_CLAIMABLE_TASK")
         if task["state"] == "CLAIMED":
-            raise ValueError("E_PRODUCTION_AGENT_TASK_ALREADY_CLAIMED")
+            _commit_claim_rejection(db, "E_PRODUCTION_AGENT_TASK_ALREADY_CLAIMED")
         if task["state"] != "PENDING":
-            raise ValueError(f"E_PRODUCTION_AGENT_TASK_NOT_CLAIMABLE:{task['state']}")
+            _commit_claim_rejection(db, f"E_PRODUCTION_AGENT_TASK_NOT_CLAIMABLE:{task['state']}")
         if not task["suggested_tool"]:
-            raise ValueError("E_PRODUCTION_AGENT_TASK_REQUIRES_MANUAL_ACTION")
+            _commit_claim_rejection(db, "E_PRODUCTION_AGENT_TASK_REQUIRES_MANUAL_ACTION")
         token = hap_core.new_id(
             "agent_claim",
             f"{run_id}|{task['task_id']}|{actor}|{datetime.now(timezone.utc).isoformat()}",
@@ -442,7 +469,7 @@ def heartbeat_claim(root: Path, run_id: str, task_id: str, claim_token: str, *, 
         db.close()
 
 
-def peek_next(root: Path, run_id: str, projection: dict[str, Any], scene_aliases, *, actor: str = "codex-worker"):
+def peek_next(root: Path, run_id: str, projection: dict[str, Any] | None, scene_aliases, *, actor: str = "codex-worker"):
     snapshot = refresh_run(root, run_id, projection, scene_aliases, actor=actor)
     tasks = snapshot.get("active_tasks") or []
     return {"run": snapshot, "task": tasks[0] if tasks else None}
