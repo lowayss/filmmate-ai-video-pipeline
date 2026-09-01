@@ -6,6 +6,7 @@ const childProcess = require('node:child_process');
 const activeWorkers = new Map();
 const DEFAULT_MAX_STEPS = 12;
 const DEFAULT_CLAIM_HEARTBEAT_MS = 30000;
+const DEFAULT_CANONICAL_REPLAN_LIMIT = 1;
 
 function resourceFile(name) {
   const local = path.join(__dirname, name);
@@ -56,6 +57,12 @@ function recoverableStopReason(error) {
   if (message.includes('revision_conflict:')) return 'canonical_state_changed';
   if (message.includes('E_PRODUCTION_REVISION_SUPERSEDED')) return 'canonical_state_changed';
   return null;
+}
+
+function shouldRetryCanonicalReplan(reason, attempts, limit = DEFAULT_CANONICAL_REPLAN_LIMIT) {
+  const used = Math.max(0, Number(attempts) || 0);
+  const maximum = Math.max(0, Number(limit) || 0);
+  return reason === 'canonical_state_changed' && used < maximum;
 }
 
 function proposalPrompt(workOrder) {
@@ -261,6 +268,7 @@ async function workerLoop(worker) {
           actor: 'codex-worker',
         });
         worker.currentClaim = null;
+        worker.canonicalReplans = 0;
         emit(onEvent, {type: 'applied', run_id: worker.runId, task_id: workOrder.task_id, applied});
         if (applied?.stop_reason === 'needs_user_input') {
           emit(onEvent, {type: 'stopped', run_id: worker.runId, reason: 'needs_user_input', run: applied.run || null});
@@ -284,6 +292,18 @@ async function workerLoop(worker) {
         if (reason) {
           await releaseClaim(bridge, basePayload, worker.currentClaim, reason);
           worker.currentClaim = null;
+          if (shouldRetryCanonicalReplan(reason, worker.canonicalReplans, worker.maxCanonicalReplans)) {
+            worker.canonicalReplans += 1;
+            emit(onEvent, {
+              type: 'replanning',
+              run_id: worker.runId,
+              reason,
+              attempt: worker.canonicalReplans,
+              max_attempts: worker.maxCanonicalReplans,
+              error: String(error?.message || error),
+            });
+            continue;
+          }
           emit(onEvent, {type: 'stopped', run_id: worker.runId, reason, error: String(error?.message || error)});
           return;
         }
@@ -299,11 +319,12 @@ async function workerLoop(worker) {
   }
 }
 
-function startProductionAgentWorker({projectDir, bridge, basePayload, runId, onEvent, maxSteps = DEFAULT_MAX_STEPS, heartbeatMs = DEFAULT_CLAIM_HEARTBEAT_MS, spawn = childProcess.spawn}) {
+function startProductionAgentWorker({projectDir, bridge, basePayload, runId, onEvent, maxSteps = DEFAULT_MAX_STEPS, heartbeatMs = DEFAULT_CLAIM_HEARTBEAT_MS, maxCanonicalReplans = DEFAULT_CANONICAL_REPLAN_LIMIT, spawn = childProcess.spawn}) {
   const id = String(runId || '');
   if (!id) throw new Error('E_PRODUCTION_AGENT_RUN_ID_REQUIRED');
   if (!bridge || typeof bridge.runProductionAgentAsync !== 'function') throw new Error('E_PRODUCTION_AGENT_BRIDGE_REQUIRED');
   if (activeWorkers.has(id)) return {started: true, already_running: true, run_id: id};
+  const configuredCanonicalReplans = Number(maxCanonicalReplans);
   const worker = {
     runId: id,
     projectDir: path.resolve(projectDir),
@@ -312,6 +333,10 @@ function startProductionAgentWorker({projectDir, bridge, basePayload, runId, onE
     onEvent,
     maxSteps: Math.max(1, Math.min(50, Number(maxSteps) || DEFAULT_MAX_STEPS)),
     heartbeatMs: Math.max(1000, Number(heartbeatMs) || DEFAULT_CLAIM_HEARTBEAT_MS),
+    maxCanonicalReplans: Number.isFinite(configuredCanonicalReplans)
+      ? Math.max(0, Math.min(3, Math.floor(configuredCanonicalReplans)))
+      : DEFAULT_CANONICAL_REPLAN_LIMIT,
+    canonicalReplans: 0,
     spawn,
     cancelled: false,
     currentChild: null,
@@ -348,10 +373,12 @@ function activeProductionAgentWorkers() {
 module.exports = {
   DEFAULT_MAX_STEPS,
   DEFAULT_CLAIM_HEARTBEAT_MS,
+  DEFAULT_CANONICAL_REPLAN_LIMIT,
   startProductionAgentWorker,
   cancelProductionAgentWorker,
   activeProductionAgentWorkers,
   proposalPrompt,
   failureMessage,
   recoverableStopReason,
+  shouldRetryCanonicalReplan,
 };
