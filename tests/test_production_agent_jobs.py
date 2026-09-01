@@ -42,6 +42,7 @@ class ProductionAgentJobTests(unittest.TestCase):
         self.assertEqual(claimed["task"]["state"], "CLAIMED")
         self.assertEqual(claimed["task"]["suggested_tool"], "save_production_object")
         self.assertTrue(claimed["task"]["claim_token"].startswith("agent_claim_"))
+        self.assertIsNotNone(claimed["task"]["claimed_at"])
 
     def test_refresh_resolves_task_only_when_plan_no_longer_requires_it(self):
         run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
@@ -73,6 +74,43 @@ class ProductionAgentJobTests(unittest.TestCase):
         task = next(task for task in released["tasks"] if task["task_id"] == claimed["task"]["task_id"])
         self.assertEqual(task["state"], "PENDING")
         self.assertEqual(task["last_error"], "worker stopped")
+        self.assertIsNone(task["claimed_at"])
+
+    def test_expired_claim_is_recovered_from_canonical_queue(self):
+        run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        claimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
+        task_id = claimed["task"]["task_id"]
+        db = hap_core.connect(self.root)
+        try:
+            db.execute("UPDATE production_agent_tasks SET claimed_at=? WHERE task_id=?", ("2000-01-01T00:00:00+00:00", task_id))
+            db.commit()
+        finally:
+            db.close()
+        refreshed = production_agent_jobs.refresh_run(self.root, run["run_id"], self.projection(), ["S1"])
+        task = next(task for task in refreshed["tasks"] if task["task_id"] == task_id)
+        self.assertEqual(task["state"], "PENDING")
+        self.assertIsNone(task["claim_token"])
+        self.assertIsNone(task["claimed_at"])
+        self.assertEqual(task["last_error"], "claim_lease_expired")
+        self.assertTrue(any(event["event"] == "task_claim_expired" and event["task_id"] == task_id for event in refreshed["events"]))
+
+    def test_claim_heartbeat_renews_lease_and_rejects_wrong_owner(self):
+        run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+        claimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
+        task = claimed["task"]
+        with self.assertRaisesRegex(ValueError, "CLAIM_INVALID"):
+            production_agent_jobs.heartbeat_claim(self.root, run["run_id"], task["task_id"], "wrong", actor="worker-b")
+        heartbeat = production_agent_jobs.heartbeat_claim(
+            self.root, run["run_id"], task["task_id"], task["claim_token"], actor="worker-a"
+        )
+        self.assertEqual(heartbeat["task"]["state"], "CLAIMED")
+        self.assertEqual(heartbeat["task"]["claim_token"], task["claim_token"])
+        self.assertEqual(heartbeat["task"]["claimed_at"], heartbeat["heartbeat_at"])
+        refreshed = production_agent_jobs.refresh_run(
+            self.root, run["run_id"], self.projection(), ["S1"], claim_lease_seconds=30
+        )
+        refreshed_task = next(item for item in refreshed["tasks"] if item["task_id"] == task["task_id"])
+        self.assertEqual(refreshed_task["state"], "CLAIMED")
 
 
 if __name__ == "__main__":
