@@ -443,7 +443,7 @@ def claim_next(root: Path, run_id: str, projection: dict[str, Any] | None, scene
         db.close()
 
 
-def heartbeat_claim(root: Path, run_id: str, task_id: str, claim_token: str, *, actor: str = "codex-worker"):
+def heartbeat_claim(root: Path, run_id: str, task_id: str, claim_token: str, *, actor: str = "codex-worker", claim_lease_seconds: int = DEFAULT_CLAIM_LEASE_SECONDS):
     db = _connect(root)
     try:
         db.execute("BEGIN IMMEDIATE")
@@ -453,6 +453,8 @@ def heartbeat_claim(root: Path, run_id: str, task_id: str, claim_token: str, *, 
         task = _task_row(db, run_id, task_id)
         if task["state"] != "CLAIMED" or task["claim_token"] != claim_token:
             raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID")
+        if _claim_expired(task, now=datetime.now(timezone.utc), lease_seconds=claim_lease_seconds):
+            raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID:EXPIRED")
         now = hap_core.now()
         cursor = db.execute(
             "UPDATE production_agent_tasks SET claimed_at=?,updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
