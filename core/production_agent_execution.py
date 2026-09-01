@@ -278,6 +278,15 @@ def _idempotency_key(work_order: dict[str, Any], normalized: dict[str, Any]) -> 
     return f"production-agent:{work_order['run_id']}:{work_order['task_id']}:{work_order['claim_checkpoint']}:{digest}"
 
 
+def _claim_guard(work_order: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "run_id": work_order["run_id"],
+        "task_id": work_order["task_id"],
+        "claim_token": work_order["claim_token"],
+        "claim_checkpoint": work_order["claim_checkpoint"],
+    }
+
+
 def _release(root: Path, work_order: dict[str, Any], error: str, actor: str):
     return production_agent_jobs.control_run(
         root,
@@ -305,6 +314,7 @@ def apply_proposal(
         root, projection, scene_aliases, run_id=run_id, task_id=task_id, claim_token=claim_token
     )
     normalized = validate_proposal(work_order, proposal)
+    claim_guard = _claim_guard(work_order)
     if normalized["decision"] == "needs_user_input":
         snapshot = _release(root, work_order, f"E_PRODUCTION_AGENT_USER_INPUT_REQUIRED:{normalized['reason']}", actor)
         return {"applied": False, "resolved": False, "progress_made": False, "stop_reason": "needs_user_input", "work_order": work_order, "run": snapshot}
@@ -325,6 +335,7 @@ def apply_proposal(
             "expected_revision_id": conti.get("revision_id"),
             "expected_scene_revision_id": screenplay.get("revision_id"),
             "idempotency_key": _idempotency_key(work_order, normalized),
+            "claim_guard": claim_guard,
         })
     elif normalized["tool"] == "save_production_object":
         target = work_order.get("target_entity") or {}
@@ -348,6 +359,7 @@ def apply_proposal(
             "producer": "production-agent-codex",
             "actor": "codex",
             "idempotency_key": _idempotency_key(work_order, normalized),
+            "claim_guard": claim_guard,
         }
         mutation = production_commands.save_production_object(root, None, scene_aliases, request)
     else:
