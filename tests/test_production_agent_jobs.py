@@ -75,6 +75,8 @@ class ProductionAgentJobTests(unittest.TestCase):
         self.assertEqual(task["state"], "PENDING")
         self.assertEqual(task["last_error"], "worker stopped")
         self.assertIsNone(task["claimed_at"])
+        reclaimed = production_agent_jobs.claim_next(self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a")
+        self.assertNotEqual(reclaimed["task"]["claim_token"], claimed["task"]["claim_token"])
 
     def test_expired_claim_is_recovered_from_canonical_queue(self):
         run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
