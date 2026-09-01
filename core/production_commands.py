@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 
-from core import hap_core
+from core import hap_core, production_agent_claim_guard
 
 READY_STATES = {"accepted", "verified", "ready"}
 ACTIVE_PROMPT_JOB_STATES = {"QUEUED", "CLAIMED", "WRITING", "VALIDATING"}
@@ -283,6 +283,7 @@ def save_production_object(root: Path, projection, scene_aliases, request):
     db = hap_core.connect(root)
     try:
         db.execute("BEGIN IMMEDIATE")
+        production_agent_claim_guard.assert_active_claim(db, request.get("claim_guard"))
         current_projection = projection if projection is not None else hap_core.write_projection(root, db)
         owner = find_scene_entity(current_projection, scene_aliases)
         if owner is None:
