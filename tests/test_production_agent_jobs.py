@@ -223,6 +223,56 @@ class ProductionAgentJobTests(unittest.TestCase):
         self.assertEqual(reclaimed["task"]["state"], "CLAIMED")
         self.assertNotEqual(reclaimed["task"]["claim_token"], task["claim_token"])
 
+    def test_expired_claim_cannot_be_released_or_failed_by_stale_worker(self):
+        for control in ("release_task", "fail_task"):
+            with self.subTest(control=control):
+                run = production_agent_jobs.start_run(self.root, self.projection(), ["S1"], goal="영상 생성 준비 완료까지")
+                claimed = production_agent_jobs.claim_next(
+                    self.root, run["run_id"], self.projection(), ["S1"], actor="worker-a"
+                )
+                task = claimed["task"]
+                db = hap_core.connect(self.root)
+                try:
+                    db.execute(
+                        "UPDATE production_agent_tasks SET claimed_at='2000-01-01T00:00:00+00:00' WHERE task_id=?",
+                        (task["task_id"],),
+                    )
+                    db.commit()
+                finally:
+                    db.close()
+                with self.assertRaisesRegex(ValueError, "TASK_CLAIM_INVALID:EXPIRED"):
+                    production_agent_jobs.control_run(
+                        self.root,
+                        run["run_id"],
+                        control,
+                        actor="worker-a",
+                        task_id=task["task_id"],
+                        claim_token=task["claim_token"],
+                        error="late worker error",
+                    )
+                db = hap_core.connect(self.root)
+                try:
+                    persisted = db.execute(
+                        "SELECT state,claim_token,last_error FROM production_agent_tasks WHERE task_id=?",
+                        (task["task_id"],),
+                    ).fetchone()
+                    run_row = db.execute(
+                        "SELECT state,last_error FROM production_agent_runs WHERE run_id=?",
+                        (run["run_id"],),
+                    ).fetchone()
+                    event = db.execute(
+                        "SELECT event FROM production_agent_events WHERE run_id=? AND task_id=? ORDER BY event_id DESC LIMIT 1",
+                        (run["run_id"], task["task_id"]),
+                    ).fetchone()
+                finally:
+                    db.close()
+                self.assertEqual(persisted["state"], "PENDING")
+                self.assertIsNone(persisted["claim_token"])
+                self.assertEqual(persisted["last_error"], "claim_lease_expired")
+                self.assertEqual(run_row["state"], "READY")
+                self.assertIsNone(run_row["last_error"])
+                self.assertEqual(event["event"], "task_claim_expired")
+
 
 if __name__ == "__main__":
     unittest.main()

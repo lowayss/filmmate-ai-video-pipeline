@@ -511,6 +511,9 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
             task = _task_row(db, run_id, task_id)
             if task["state"] != "CLAIMED" or task["claim_token"] != claim_token:
                 raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID")
+            if _claim_expired(task, now=datetime.now(timezone.utc), lease_seconds=DEFAULT_CLAIM_LEASE_SECONDS):
+                _expire_claim_row(db, task, actor, lease_seconds=DEFAULT_CLAIM_LEASE_SECONDS)
+                _commit_claim_rejection(db, "E_PRODUCTION_AGENT_TASK_CLAIM_INVALID:EXPIRED")
             base = _base_task_state({"status": task["plan_status"]})
             db.execute(
                 "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error=?,updated_at=? WHERE task_id=?",
@@ -523,6 +526,9 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
             task = _task_row(db, run_id, task_id)
             if task["state"] != "CLAIMED" or task["claim_token"] != claim_token:
                 raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID")
+            if _claim_expired(task, now=datetime.now(timezone.utc), lease_seconds=DEFAULT_CLAIM_LEASE_SECONDS):
+                _expire_claim_row(db, task, actor, lease_seconds=DEFAULT_CLAIM_LEASE_SECONDS)
+                _commit_claim_rejection(db, "E_PRODUCTION_AGENT_TASK_CLAIM_INVALID:EXPIRED")
             db.execute(
                 "UPDATE production_agent_tasks SET state='FAILED',claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error=?,updated_at=? WHERE task_id=?",
                 (error or "task_failed", now, task_id),
