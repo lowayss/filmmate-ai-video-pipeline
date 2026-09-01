@@ -4,7 +4,7 @@ on:
   push:
     branches: [reinforcement-v3]
     paths:
-      - '.filmmate/reinforcement-v3.patch'
+      - '.filmmate/apply_reinforcement_v3.py'
       - '.github/workflows/apply-reinforcement-v3.yml'
 
 permissions:
@@ -18,12 +18,12 @@ jobs:
         with:
           ref: reinforcement-v3
           fetch-depth: 0
-      - name: Apply desktop async patch
+      - name: Apply verified desktop async changes
         run: |
-          git apply --check .filmmate/reinforcement-v3.patch
-          git apply .filmmate/reinforcement-v3.patch
-          rm .filmmate/reinforcement-v3.patch
-          rm .github/workflows/apply-reinforcement-v3.yml
+          python3 .filmmate/apply_reinforcement_v3.py
+          rm -f .filmmate/apply_reinforcement_v3.py
+          rm -f .filmmate/reinforcement-v3.patch
+          rm -f .github/workflows/apply-reinforcement-v3.yml
       - name: Run Node regression tests
         run: node --test desktop/*.test.cjs
       - name: Run Python regression tests
