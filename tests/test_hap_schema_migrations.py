@@ -144,6 +144,71 @@ class HapSchemaMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "E_HAP_SCHEMA_VERSION_INVALID"):
             hap_core.connect(self.root)
 
+    def test_unrelated_sqlite_file_is_not_adopted_as_hap(self):
+        path = hap_core.db_path(self.root)
+        path.unlink()
+        db = sqlite3.connect(path)
+        try:
+            db.execute("CREATE TABLE unrelated(id INTEGER PRIMARY KEY, value TEXT)")
+            db.execute("INSERT INTO unrelated(value) VALUES('keep-me')")
+            db.commit()
+        finally:
+            db.close()
+        with self.assertRaisesRegex(ValueError, "E_HAP_SCHEMA_IDENTITY_MISSING:meta,entities,revisions"):
+            hap_core.connect(self.root)
+        db = sqlite3.connect(path)
+        try:
+            unrelated = db.execute("SELECT value FROM unrelated").fetchone()[0]
+            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        finally:
+            db.close()
+        self.assertEqual(unrelated, "keep-me")
+        self.assertEqual(tables, {"unrelated"})
+
+    def test_missing_schema_version_is_rejected_before_ddl_runs(self):
+        db = self.raw_db()
+        try:
+            db.execute("DROP TABLE prompt_job_events")
+            db.execute("DELETE FROM meta WHERE key='schema_version'")
+            db.commit()
+        finally:
+            db.close()
+        with self.assertRaisesRegex(ValueError, "E_HAP_SCHEMA_IDENTITY_MISSING:schema_version"):
+            hap_core.connect(self.root)
+        db = self.raw_db()
+        try:
+            table_exists = db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='prompt_job_events'"
+            ).fetchone()
+            schema_row = db.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+        finally:
+            db.close()
+        self.assertIsNone(table_exists)
+        self.assertIsNone(schema_row)
+
+    def test_missing_core_identity_table_is_rejected_before_ddl_runs(self):
+        db = self.raw_db()
+        try:
+            db.execute("DROP TABLE revisions")
+            db.execute("DROP TABLE prompt_job_events")
+            db.commit()
+        finally:
+            db.close()
+        with self.assertRaisesRegex(ValueError, "E_HAP_SCHEMA_IDENTITY_MISSING:revisions"):
+            hap_core.connect(self.root)
+        db = self.raw_db()
+        try:
+            revisions_exists = db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='revisions'"
+            ).fetchone()
+            prompt_events_exists = db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='prompt_job_events'"
+            ).fetchone()
+        finally:
+            db.close()
+        self.assertIsNone(revisions_exists)
+        self.assertIsNone(prompt_events_exists)
+
 
 if __name__ == "__main__":
     unittest.main()
