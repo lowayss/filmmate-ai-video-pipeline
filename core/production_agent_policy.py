@@ -5,6 +5,7 @@ from typing import Any
 
 DEFAULT_CLAIM_LEASE_SECONDS = 300
 MIN_CLAIM_LEASE_SECONDS = 30
+MAX_CLAIM_LEASE_SECONDS = 3600
 MAX_CLAIM_CLOCK_SKEW_SECONDS = 5
 
 
@@ -12,8 +13,9 @@ def resolve_claim_lease_seconds(value: Any = None) -> int:
     """Return the canonical Production Agent claim lease duration.
 
     Runtime/test overrides are allowed, but no caller can create a lease shorter
-    than the shared safety floor. Missing, falsey-zero, or invalid values fall
-    back to the canonical default, preserving the queue's previous semantics.
+    than the shared safety floor or longer than the canonical safety ceiling.
+    Missing, falsey-zero, or invalid values fall back to the canonical default,
+    preserving the queue's previous semantics.
     """
     if value is None or value == "" or value is False or value == 0:
         return DEFAULT_CLAIM_LEASE_SECONDS
@@ -21,7 +23,7 @@ def resolve_claim_lease_seconds(value: Any = None) -> int:
         seconds = int(value)
     except (TypeError, ValueError):
         return DEFAULT_CLAIM_LEASE_SECONDS
-    return max(MIN_CLAIM_LEASE_SECONDS, seconds)
+    return min(MAX_CLAIM_LEASE_SECONDS, max(MIN_CLAIM_LEASE_SECONDS, seconds))
 
 
 def parse_utc_timestamp(value: Any) -> datetime | None:
