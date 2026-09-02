@@ -3,7 +3,13 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from core import filmmate_documents, production_agent_claim_guard, production_agent_jobs, production_commands
+from core import (
+    filmmate_documents,
+    production_agent_claim_guard,
+    production_agent_jobs,
+    production_agent_policy,
+    production_commands,
+)
 
 
 class ProductionAgentClaimGuardTests(unittest.TestCase):
@@ -53,9 +59,16 @@ class ProductionAgentClaimGuardTests(unittest.TestCase):
         finally:
             db.close()
 
-    def test_guard_lease_matches_queue_default(self):
-        self.assertEqual(production_agent_claim_guard.DEFAULT_CLAIM_LEASE_SECONDS, production_agent_jobs.DEFAULT_CLAIM_LEASE_SECONDS)
-        self.assertEqual(production_agent_claim_guard.DEFAULT_CLAIM_LEASE_SECONDS, 300)
+    def test_guard_and_queue_export_the_shared_policy_default(self):
+        self.assertEqual(
+            production_agent_claim_guard.DEFAULT_CLAIM_LEASE_SECONDS,
+            production_agent_policy.DEFAULT_CLAIM_LEASE_SECONDS,
+        )
+        self.assertEqual(
+            production_agent_jobs.DEFAULT_CLAIM_LEASE_SECONDS,
+            production_agent_policy.DEFAULT_CLAIM_LEASE_SECONDS,
+        )
+        self.assertEqual(production_agent_policy.DEFAULT_CLAIM_LEASE_SECONDS, 300)
 
     def test_pause_or_revoked_token_blocks_semantic_write(self):
         db = self.database()
@@ -82,7 +95,7 @@ class ProductionAgentClaimGuardTests(unittest.TestCase):
     def test_expired_or_missing_lease_blocks_semantic_write(self):
         expired = (
             datetime.now(timezone.utc)
-            - timedelta(seconds=production_agent_claim_guard.DEFAULT_CLAIM_LEASE_SECONDS + 1)
+            - timedelta(seconds=production_agent_policy.DEFAULT_CLAIM_LEASE_SECONDS + 1)
         ).replace(microsecond=0).isoformat()
         db = self.database(expired)
         try:

@@ -1,27 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
-DEFAULT_CLAIM_LEASE_SECONDS = 300
+from core import production_agent_policy
 
-
-def _parse_claimed_at(value: Any) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(str(value or ""))
-    except (TypeError, ValueError):
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def _claim_expired(claimed_at: Any, *, now: datetime | None = None) -> bool:
-    parsed = _parse_claimed_at(claimed_at)
-    if parsed is None:
-        return True
-    current = now or datetime.now(timezone.utc)
-    return (current - parsed).total_seconds() >= DEFAULT_CLAIM_LEASE_SECONDS
+DEFAULT_CLAIM_LEASE_SECONDS = production_agent_policy.DEFAULT_CLAIM_LEASE_SECONDS
 
 
 def assert_active_claim(db, guard: dict[str, Any] | None):
@@ -30,8 +13,9 @@ def assert_active_claim(db, guard: dict[str, Any] | None):
     The caller must already hold the SQLite write transaction that will perform
     the semantic mutation. This makes pause/cancel/claim-revocation linear with
     the write: whichever transaction acquires the lock first wins. The final
-    mutation also enforces the same default claim lease used by the queue, so a
-    worker cannot wake from a long sleep and write through an abandoned claim.
+    mutation also enforces the same shared claim lease policy used by the queue,
+    so a worker cannot wake from a long sleep and write through an abandoned
+    claim.
     """
     if guard is None:
         return None
@@ -58,6 +42,6 @@ def assert_active_claim(db, guard: dict[str, Any] | None):
         raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID")
     if row["claim_checkpoint"] != checkpoint or row["run_checkpoint"] != checkpoint:
         raise ValueError("E_PRODUCTION_AGENT_CLAIM_CHECKPOINT_CHANGED")
-    if _claim_expired(row["claimed_at"]):
+    if production_agent_policy.claim_is_expired(row["claimed_at"]):
         raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_INVALID:EXPIRED")
     return row

@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from core import hap_core, production_orchestrator
+from core import hap_core, production_agent_policy, production_orchestrator
 
 RUN_STATES = {"READY", "PAUSED", "WAITING_REVIEW", "WAITING_WORK", "BLOCKED", "COMPLETE", "CANCELLED", "FAILED"}
 TASK_STATES = {"PENDING", "CLAIMED", "WAITING_REVIEW", "WAITING_WORK", "BLOCKED", "COMPLETE", "FAILED"}
-DEFAULT_CLAIM_LEASE_SECONDS = 300
+DEFAULT_CLAIM_LEASE_SECONDS = production_agent_policy.DEFAULT_CLAIM_LEASE_SECONDS
 
 DDL = """
 CREATE TABLE IF NOT EXISTS production_agent_runs(
@@ -89,21 +89,12 @@ def _projection_for_plan(root: Path, db, projection: dict[str, Any] | None):
     return projection if projection is not None else hap_core.write_projection(root, db)
 
 
-def _parse_timestamp(value: Any) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(str(value or ""))
-    except (TypeError, ValueError):
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
 def _claim_expired(row, *, now: datetime, lease_seconds: int) -> bool:
-    claimed_at = _parse_timestamp(row["claimed_at"])
-    if claimed_at is None:
-        return True
-    return (now - claimed_at).total_seconds() >= max(30, int(lease_seconds or DEFAULT_CLAIM_LEASE_SECONDS))
+    return production_agent_policy.claim_is_expired(
+        row["claimed_at"],
+        now=now,
+        lease_seconds=lease_seconds,
+    )
 
 
 def _expire_claim_row(db, row, actor: str, *, lease_seconds: int) -> bool:
@@ -120,7 +111,11 @@ def _expire_claim_row(db, row, actor: str, *, lease_seconds: int) -> bool:
         row["run_id"],
         "task_claim_expired",
         actor,
-        {"claim_actor": row["claim_actor"], "claimed_at": row["claimed_at"], "lease_seconds": max(30, int(lease_seconds or DEFAULT_CLAIM_LEASE_SECONDS))},
+        {
+            "claim_actor": row["claim_actor"],
+            "claimed_at": row["claimed_at"],
+            "lease_seconds": production_agent_policy.resolve_claim_lease_seconds(lease_seconds),
+        },
         row["task_id"],
     )
     return True
