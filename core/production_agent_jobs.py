@@ -73,7 +73,8 @@ def _connect(root: Path):
     db.executescript(DDL)
     columns = {row[1] for row in db.execute("PRAGMA table_info(production_agent_tasks)").fetchall()}
     if "claim_lease_seconds" not in columns:
-        db.execute("ALTER TABLE production_agent_tasks ADD COLUMN claim_lease_seconds INTEGER")
+        db.close()
+        raise RuntimeError("E_PRODUCTION_AGENT_SCHEMA_INCOMPLETE:claim_lease_seconds")
     db.commit()
     return db
 
