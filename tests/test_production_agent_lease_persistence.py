@@ -173,8 +173,8 @@ class ProductionAgentLeasePersistenceTests(unittest.TestCase):
         finally:
             db.close()
 
-    def test_connect_migrates_legacy_task_table(self):
-        db = hap_core.connect(self.root)
+    def _replace_with_legacy_task_table(self, *, schema_version):
+        db = sqlite3.connect(hap_core.db_path(self.root))
         try:
             db.execute("DROP TABLE IF EXISTS production_agent_tasks")
             db.execute("""
@@ -186,15 +186,26 @@ class ProductionAgentLeasePersistenceTests(unittest.TestCase):
                   last_error TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(run_id,signature)
                 )
             """)
+            db.execute("UPDATE meta SET value=? WHERE key='schema_version'", (str(schema_version),))
             db.commit()
         finally:
             db.close()
-        migrated = production_agent_jobs._connect(self.root)
+
+    def test_hap_v3_migration_upgrades_legacy_task_table(self):
+        self._replace_with_legacy_task_table(schema_version=3)
+        migrated = hap_core.connect(self.root)
         try:
             columns = {row[1] for row in migrated.execute("PRAGMA table_info(production_agent_tasks)").fetchall()}
+            version = migrated.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
         finally:
             migrated.close()
         self.assertIn("claim_lease_seconds", columns)
+        self.assertEqual(version, "4")
+
+    def test_agent_connect_does_not_repair_malformed_v4_schema(self):
+        self._replace_with_legacy_task_table(schema_version=4)
+        with self.assertRaisesRegex(RuntimeError, "E_PRODUCTION_AGENT_SCHEMA_INCOMPLETE:claim_lease_seconds"):
+            production_agent_jobs._connect(self.root)
 
 
 if __name__ == "__main__":
