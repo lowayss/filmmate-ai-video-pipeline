@@ -16,21 +16,33 @@ concurrency:
 
 jobs:
   python-tests:
-    name: Python tests
+    name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
+      - name: Compile Python sources
+        run: >-
+          python -m compileall -q
+          core tests
+          app.py mcp_server.py package_compiler.py project_importer.py
+          scene_breakdown.py screenplay_analyzer.py workspace_compiler.py
       - name: Run Python regression tests
         run: python -m unittest discover -s tests -v
 
   node-tests:
-    name: Desktop Node tests
+    name: Desktop Node 22
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -40,6 +52,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Check Desktop JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in desktop/*.cjs desktop/*.js; do
+            node --check "$file"
+          done
       - name: Run Desktop regression tests
         run: >-
           node --test
