@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS production_agent_tasks(
   claim_token TEXT,
   claim_checkpoint TEXT,
   claimed_at TEXT,
+  claim_lease_seconds INTEGER,
   last_error TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -70,6 +71,9 @@ CREATE INDEX IF NOT EXISTS idx_agent_events_run ON production_agent_events(run_i
 def _connect(root: Path):
     db = hap_core.connect(root)
     db.executescript(DDL)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(production_agent_tasks)").fetchall()}
+    if "claim_lease_seconds" not in columns:
+        db.execute("ALTER TABLE production_agent_tasks ADD COLUMN claim_lease_seconds INTEGER")
     db.commit()
     return db
 
@@ -89,19 +93,30 @@ def _projection_for_plan(root: Path, db, projection: dict[str, Any] | None):
     return projection if projection is not None else hap_core.write_projection(root, db)
 
 
-def _claim_expired(row, *, now: datetime, lease_seconds: int) -> bool:
+def _row_claim_lease_seconds(row, fallback: Any = None) -> int:
+    try:
+        stored = row["claim_lease_seconds"]
+    except (IndexError, KeyError, TypeError):
+        stored = None
+    if stored is not None:
+        return production_agent_policy.resolve_claim_lease_seconds(stored)
+    return production_agent_policy.resolve_claim_lease_seconds(fallback)
+
+
+def _claim_expired(row, *, now: datetime, lease_seconds: int | None = None) -> bool:
     return production_agent_policy.claim_is_expired(
         row["claimed_at"],
         now=now,
-        lease_seconds=lease_seconds,
+        lease_seconds=_row_claim_lease_seconds(row, lease_seconds),
     )
 
 
-def _expire_claim_row(db, row, actor: str, *, lease_seconds: int) -> bool:
+def _expire_claim_row(db, row, actor: str, *, lease_seconds: int | None = None) -> bool:
     base = _base_task_state({"status": row["plan_status"]})
+    effective_lease = _row_claim_lease_seconds(row, lease_seconds)
     now = hap_core.now()
     cursor = db.execute(
-        "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error='claim_lease_expired',updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
+        "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,claim_lease_seconds=NULL,last_error='claim_lease_expired',updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
         (base, now, row["task_id"], row["claim_token"]),
     )
     if cursor.rowcount != 1:
@@ -114,7 +129,7 @@ def _expire_claim_row(db, row, actor: str, *, lease_seconds: int) -> bool:
         {
             "claim_actor": row["claim_actor"],
             "claimed_at": row["claimed_at"],
-            "lease_seconds": production_agent_policy.resolve_claim_lease_seconds(lease_seconds),
+            "lease_seconds": effective_lease,
         },
         row["task_id"],
     )
@@ -169,7 +184,7 @@ def _release_claimed_tasks_for_control(db, run_id: str, actor: str, reason: str)
     for row in rows:
         base = _base_task_state({"status": row["plan_status"]})
         cursor = db.execute(
-            "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error=NULL,updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
+            "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,claim_lease_seconds=NULL,last_error=NULL,updated_at=? WHERE task_id=? AND state='CLAIMED' AND claim_token=?",
             (base, now, row["task_id"], row["claim_token"]),
         )
         if cursor.rowcount != 1:
@@ -240,7 +255,7 @@ def _sync_tasks(db, run_row, plan: dict[str, Any], actor: str):
         if signature in desired_signatures:
             continue
         db.execute(
-            "UPDATE production_agent_tasks SET state='COMPLETE',claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,updated_at=? WHERE task_id=?",
+            "UPDATE production_agent_tasks SET state='COMPLETE',claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,claim_lease_seconds=NULL,updated_at=? WHERE task_id=?",
             (now, row["task_id"]),
         )
         _event(db, run_id, "task_resolved_from_canonical_state", actor, {"previous_checkpoint": run_row["checkpoint"], "checkpoint": plan.get("checkpoint")}, row["task_id"])
@@ -288,6 +303,7 @@ def _task_dict(row):
         "claim_token": row["claim_token"],
         "claim_checkpoint": row["claim_checkpoint"],
         "claimed_at": row["claimed_at"],
+        "claim_lease_seconds": row["claim_lease_seconds"],
         "last_error": row["last_error"],
         "updated_at": row["updated_at"],
     }
@@ -425,14 +441,15 @@ def claim_next(root: Path, run_id: str, projection: dict[str, Any] | None, scene
             "agent_claim",
             f"{run_id}|{task['task_id']}|{actor}|{datetime.now(timezone.utc).isoformat()}",
         )
+        effective_lease = production_agent_policy.resolve_claim_lease_seconds(claim_lease_seconds)
         now = hap_core.now()
         cursor = db.execute(
-            "UPDATE production_agent_tasks SET state='CLAIMED',claim_actor=?,claim_token=?,claim_checkpoint=?,claimed_at=?,last_error=NULL,updated_at=? WHERE task_id=? AND state='PENDING'",
-            (actor, token, run["checkpoint"], now, now, task["task_id"]),
+            "UPDATE production_agent_tasks SET state='CLAIMED',claim_actor=?,claim_token=?,claim_checkpoint=?,claimed_at=?,claim_lease_seconds=?,last_error=NULL,updated_at=? WHERE task_id=? AND state='PENDING'",
+            (actor, token, run["checkpoint"], now, effective_lease, now, task["task_id"]),
         )
         if cursor.rowcount != 1:
             raise ValueError("E_PRODUCTION_AGENT_TASK_CLAIM_RACE")
-        _event(db, run_id, "task_claimed", actor, {"checkpoint": run["checkpoint"], "suggested_tool": task["suggested_tool"]}, task["task_id"])
+        _event(db, run_id, "task_claimed", actor, {"checkpoint": run["checkpoint"], "suggested_tool": task["suggested_tool"], "lease_seconds": effective_lease}, task["task_id"])
         db.commit()
         claimed = _task_row(db, run_id, task["task_id"])
         return {"run_id": run_id, "checkpoint": run["checkpoint"], "task": _task_dict(claimed)}
@@ -511,7 +528,7 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
                 _commit_claim_rejection(db, "E_PRODUCTION_AGENT_TASK_CLAIM_INVALID:EXPIRED")
             base = _base_task_state({"status": task["plan_status"]})
             db.execute(
-                "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error=?,updated_at=? WHERE task_id=?",
+                "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,claim_lease_seconds=NULL,last_error=?,updated_at=? WHERE task_id=?",
                 (base, error, now, task_id),
             )
             _event(db, run_id, "task_released", actor, {"error": error}, task_id)
@@ -525,7 +542,7 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
                 _expire_claim_row(db, task, actor, lease_seconds=DEFAULT_CLAIM_LEASE_SECONDS)
                 _commit_claim_rejection(db, "E_PRODUCTION_AGENT_TASK_CLAIM_INVALID:EXPIRED")
             db.execute(
-                "UPDATE production_agent_tasks SET state='FAILED',claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error=?,updated_at=? WHERE task_id=?",
+                "UPDATE production_agent_tasks SET state='FAILED',claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,claim_lease_seconds=NULL,last_error=?,updated_at=? WHERE task_id=?",
                 (error or "task_failed", now, task_id),
             )
             db.execute("UPDATE production_agent_runs SET state='FAILED',last_error=?,updated_at=? WHERE run_id=?", (error or "task_failed", now, run_id))
@@ -538,7 +555,7 @@ def control_run(root: Path, run_id: str, action: str, *, actor: str = "filmmate-
                 raise ValueError("E_PRODUCTION_AGENT_TASK_NOT_FAILED")
             base = _base_task_state({"status": task["plan_status"]})
             db.execute(
-                "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,last_error=NULL,updated_at=? WHERE task_id=?",
+                "UPDATE production_agent_tasks SET state=?,claim_actor=NULL,claim_token=NULL,claim_checkpoint=NULL,claimed_at=NULL,claim_lease_seconds=NULL,last_error=NULL,updated_at=? WHERE task_id=?",
                 (base, now, task_id),
             )
             db.execute("UPDATE production_agent_runs SET state='READY',last_error=NULL,updated_at=? WHERE run_id=?", (now, run_id))
