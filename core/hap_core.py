@@ -140,6 +140,12 @@ CREATE INDEX IF NOT EXISTS idx_prompt_job_state ON prompt_jobs(state, updated_at
 CREATE INDEX IF NOT EXISTS idx_prompt_job_events ON prompt_job_events(job_id, event_id);
 """
 
+HAP_IDENTITY_COLUMNS = {
+    "meta": {"key", "value"},
+    "entities": {"entity_id", "entity_type", "logical_key"},
+    "revisions": {"revision_id", "entity_id", "rev_no"},
+}
+
 
 def _table_exists(db: sqlite3.Connection, table: str) -> bool:
     return db.execute(
@@ -154,12 +160,21 @@ def _table_columns(db: sqlite3.Connection, table: str) -> set[str]:
     return {str(row[1]) for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
 
 
+def _assert_hap_identity(db: sqlite3.Connection):
+    missing_tables = [table for table in HAP_IDENTITY_COLUMNS if not _table_exists(db, table)]
+    if missing_tables:
+        raise ValueError(f"E_HAP_SCHEMA_IDENTITY_MISSING:{','.join(missing_tables)}")
+    for table, required_columns in HAP_IDENTITY_COLUMNS.items():
+        missing_columns = sorted(required_columns - _table_columns(db, table))
+        if missing_columns:
+            raise ValueError(f"E_HAP_SCHEMA_IDENTITY_INVALID:{table}:{','.join(missing_columns)}")
+
+
 def _stored_schema_version(db: sqlite3.Connection) -> int:
-    if not _table_exists(db, "meta"):
-        return MIN_SUPPORTED_SCHEMA_VERSION
+    _assert_hap_identity(db)
     row = db.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
     if row is None:
-        return MIN_SUPPORTED_SCHEMA_VERSION
+        raise ValueError("E_HAP_SCHEMA_IDENTITY_MISSING:schema_version")
     try:
         version = int(row["value"])
     except (TypeError, ValueError, KeyError, IndexError):
