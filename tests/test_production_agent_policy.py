@@ -9,6 +9,7 @@ class ProductionAgentPolicyTests(unittest.TestCase):
     def test_claim_lease_default_and_floor_are_canonical(self):
         self.assertEqual(production_agent_policy.DEFAULT_CLAIM_LEASE_SECONDS, 300)
         self.assertEqual(production_agent_policy.MIN_CLAIM_LEASE_SECONDS, 30)
+        self.assertEqual(production_agent_policy.MAX_CLAIM_CLOCK_SKEW_SECONDS, 5)
         self.assertEqual(production_agent_policy.resolve_claim_lease_seconds(), 300)
         self.assertEqual(production_agent_policy.resolve_claim_lease_seconds(None), 300)
         self.assertEqual(production_agent_policy.resolve_claim_lease_seconds(0), 300)
@@ -27,6 +28,15 @@ class ProductionAgentPolicyTests(unittest.TestCase):
         self.assertTrue(production_agent_policy.claim_is_expired(expired.isoformat(), now=now))
         self.assertTrue(production_agent_policy.claim_is_expired(None, now=now))
         self.assertTrue(production_agent_policy.claim_is_expired("not-a-timestamp", now=now))
+
+    def test_claim_future_timestamp_allows_only_small_clock_skew(self):
+        now = datetime(2026, 9, 2, 10, 0, 0, tzinfo=timezone.utc)
+        within_tolerance = now + timedelta(seconds=production_agent_policy.MAX_CLAIM_CLOCK_SKEW_SECONDS)
+        unsafe_future = now + timedelta(seconds=production_agent_policy.MAX_CLAIM_CLOCK_SKEW_SECONDS + 1)
+        far_future = now + timedelta(days=365)
+        self.assertFalse(production_agent_policy.claim_is_expired(within_tolerance.isoformat(), now=now))
+        self.assertTrue(production_agent_policy.claim_is_expired(unsafe_future.isoformat(), now=now))
+        self.assertTrue(production_agent_policy.claim_is_expired(far_future.isoformat(), now=now))
 
     def test_queue_and_semantic_guard_delegate_policy_implementation(self):
         jobs_source = Path(production_agent_jobs.__file__).read_text(encoding="utf-8")
