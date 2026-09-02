@@ -5,6 +5,7 @@ from typing import Any
 
 DEFAULT_CLAIM_LEASE_SECONDS = 300
 MIN_CLAIM_LEASE_SECONDS = 30
+MAX_CLAIM_CLOCK_SKEW_SECONDS = 5
 
 
 def resolve_claim_lease_seconds(value: Any = None) -> int:
@@ -43,4 +44,7 @@ def claim_is_expired(
     if parsed is None:
         return True
     current = now or datetime.now(timezone.utc)
-    return (current - parsed).total_seconds() >= resolve_claim_lease_seconds(lease_seconds)
+    age_seconds = (current - parsed).total_seconds()
+    if age_seconds < -MAX_CLAIM_CLOCK_SKEW_SECONDS:
+        return True
+    return age_seconds >= resolve_claim_lease_seconds(lease_seconds)
