@@ -217,14 +217,10 @@ def migrate_schema(db: sqlite3.Connection) -> int:
     if current > SCHEMA_VERSION:
         raise ValueError(f"E_HAP_SCHEMA_NEWER:{current}:{SCHEMA_VERSION}")
 
-    # Core tables are additive and idempotent. Apply them before the explicit
-    # migration transaction so v2 projects have the v3 table set available.
-    db.executescript(DDL)
-    if current == SCHEMA_VERSION:
-        return current
-
-    db.execute("BEGIN IMMEDIATE")
     try:
+        # Put additive DDL, explicit migration steps, and schema-version updates
+        # in one write transaction so a failure cannot leave a half-migrated DB.
+        db.executescript("BEGIN IMMEDIATE;\n" + DDL)
         for target in range(current + 1, SCHEMA_VERSION + 1):
             migration = SCHEMA_MIGRATIONS.get(target)
             if migration is None:

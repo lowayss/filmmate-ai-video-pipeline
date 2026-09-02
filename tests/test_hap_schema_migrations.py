@@ -113,6 +113,34 @@ class HapSchemaMigrationTests(unittest.TestCase):
         self.assertEqual(version, "4")
         self.assertEqual(columns.count("claim_lease_seconds"), 1)
 
+    def test_schema_ddl_and_version_update_roll_back_together_on_failure(self):
+        db = self.raw_db()
+        try:
+            db.execute("DROP TABLE prompt_job_events")
+            db.execute("DROP TABLE prompt_jobs")
+            db.execute("DROP TABLE source_links")
+            db.execute("CREATE TABLE prompt_jobs(job_id TEXT PRIMARY KEY)")
+            db.execute("UPDATE meta SET value='3' WHERE key='schema_version'")
+            db.commit()
+        finally:
+            db.close()
+
+        with self.assertRaises(sqlite3.OperationalError):
+            hap_core.connect(self.root)
+
+        db = self.raw_db()
+        try:
+            version = db.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
+            source_links_exists = db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='source_links'"
+            ).fetchone()
+            prompt_columns = {row[1] for row in db.execute("PRAGMA table_info(prompt_jobs)").fetchall()}
+        finally:
+            db.close()
+        self.assertEqual(version, "3")
+        self.assertIsNone(source_links_exists)
+        self.assertEqual(prompt_columns, {"job_id"})
+
     def test_future_schema_is_rejected_before_current_ddl_runs(self):
         db = self.raw_db()
         try:
