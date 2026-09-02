@@ -21,7 +21,7 @@ from types import SimpleNamespace
 import package_compiler
 import scene_breakdown
 import workspace_compiler
-from core import filmmate_documents, hap_core, prompt_ir, prompt_jobs
+from core import filmmate_documents, hap_core, production_agent_execution, production_agent_jobs, production_commands, production_orchestrator, prompt_ir, prompt_jobs
 from package_compiler import compile_package
 from scene_breakdown import generate_breakdown
 from screenplay_analyzer import analyze_screenplay
@@ -409,6 +409,15 @@ def get_filmmate_prompt_request(args):
     }
 
 
+def semantic_scene_context(project, scene):
+    root = require_hap(project)
+    target = scene_dir(project, scene)
+    manifest_file = target / "scene-data" / "scene-manifest.json"
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8")) if manifest_file.is_file() else {}
+    aliases = [scene, target.name, manifest.get("scene_id")]
+    return root, regenerate_hap_projection(project), [item for item in aliases if item]
+
+
 def submit_filmmate_prompt_bundle(args):
     payload = {**args, "actor": "codex"}
     root = require_hap(args["project"])
@@ -436,6 +445,81 @@ def submit_filmmate_prompt_bundle(args):
 
 def call(name, args):
     try:
+        if name == "run_production_agent":
+            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_orchestrator.build_plan(
+                projection, aliases, goal=args.get("goal"), target=args.get("target"),
+                previous_checkpoint=args.get("previous_checkpoint"),
+            ))
+        if name == "start_production_run":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_agent_jobs.start_run(
+                root, projection, aliases, goal=args.get("goal"), target=args.get("target"), actor=str(args.get("actor") or "codex")
+            ))
+        if name == "get_production_run":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_agent_jobs.refresh_run(
+                root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex")
+            ))
+        if name == "claim_production_task":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_agent_jobs.claim_next(
+                root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex-worker")
+            ))
+        if name == "control_production_run":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            snapshot = production_agent_jobs.control_run(
+                root, args["run_id"], args["action"], actor=str(args.get("actor") or "codex"),
+                task_id=args.get("task_id"), claim_token=args.get("claim_token"), error=args.get("error"),
+            )
+            if args["action"] in {"resume", "retry_task"} and not snapshot.get("cancelled"):
+                snapshot = production_agent_jobs.refresh_run(root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex"))
+            return result(snapshot)
+        if name == "claim_production_work_order":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            peeked = production_agent_jobs.peek_next(root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex-worker"))
+            task = peeked.get("task")
+            if not task:
+                return result({"claimed": False, "run": peeked.get("run"), "work_order": None})
+            mode, reason = production_agent_execution.task_execution_mode(task)
+            if peeked.get("run", {}).get("state") != "READY" or mode != "proposal":
+                return result({"claimed": False, "run": peeked.get("run"), "work_order": {
+                    "schema_version": 1, "task_id": task.get("task_id"), "stage": task.get("stage"),
+                    "status": task.get("plan_status"), "suggested_tool": task.get("suggested_tool"),
+                    "instruction": task.get("instruction"), "mode": "manual",
+                    "manual_reason": reason or peeked.get("run", {}).get("state"),
+                }})
+            claimed = production_agent_jobs.claim_next(root, args["run_id"], projection, aliases, actor=str(args.get("actor") or "codex-worker"))
+            current = claimed["task"]
+            work_order = production_agent_execution.build_work_order(
+                root, projection, aliases, run_id=args["run_id"], task_id=current["task_id"], claim_token=current["claim_token"]
+            )
+            return result({"claimed": True, "run": peeked.get("run"), "work_order": work_order})
+        if name == "submit_production_work_proposal":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_agent_execution.apply_proposal(
+                root, projection, aliases, run_id=args["run_id"], task_id=args["task_id"],
+                claim_token=args["claim_token"], proposal=args["proposal"], actor=str(args.get("actor") or "codex-worker")
+            ))
+        if name == "prepare_scene":
+            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_commands.prepare_scene(projection, aliases))
+        if name == "get_generate_ready":
+            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_commands.build_scene_state(projection, aliases))
+        if name == "prepare_stale_regeneration":
+            _root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            return result(production_commands.stale_regeneration_plan(projection, aliases))
+        if name == "save_production_object":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            saved = production_commands.save_production_object(root, projection, aliases, args)
+            refreshed = regenerate_hap_projection(args["project"])
+            return result({**saved, "production": production_commands.build_scene_state(refreshed, aliases)})
+        if name == "approve_production_object":
+            root, projection, aliases = semantic_scene_context(args["project"], args["scene"])
+            approved = production_commands.approve_production_object(root, projection, aliases, args)
+            refreshed = regenerate_hap_projection(args["project"])
+            return result({**approved, "production": production_commands.build_scene_state(refreshed, aliases)})
         if name == "list_scene_projects":
             return result({"projects": [item.name for item in packages_root().iterdir() if item.is_dir() and not item.is_symlink() and not item.name.startswith(".")]})
         if name == "get_scene_status":
@@ -562,7 +646,113 @@ def call(name, args):
         return result({"error": str(exc)})
 
 
-TOOLS = [
+SEMANTIC_TOOLS = [
+    {
+        "name": "run_production_agent",
+        "description": "Plan or resume a stateless Production Agent control loop from one natural-language goal. It re-reads canonical HAP state, returns the ordered steps and exact next semantic tool, and requires a fresh checkpoint after every write. It never invents completion or auto-approves creative work.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string"},
+                "scene": {"type": "string"},
+                "goal": {"type": "string"},
+                "target": {"type": "string", "enum": ["generate_ready", "handoff_ready", "stale_clear"]},
+                "previous_checkpoint": {"type": "string"}
+            },
+            "required": ["project", "scene", "goal"]
+        },
+    },
+    {
+        "name": "start_production_run",
+        "description": "Create a durable Production Agent run from the current canonical scene plan. The queue persists in HAP SQLite and completion remains derived from canonical state.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "goal": {"type": "string"}, "target": {"type": "string", "enum": ["generate_ready", "handoff_ready", "stale_clear"]}, "actor": {"type": "string"}}, "required": ["project", "scene", "goal"]},
+    },
+    {
+        "name": "get_production_run",
+        "description": "Refresh a durable Production Agent run from current HAP state. Tasks disappear only when the canonical blocker is actually resolved.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"}, "actor": {"type": "string"}}, "required": ["project", "scene", "run_id"]},
+    },
+    {
+        "name": "claim_production_task",
+        "description": "Claim exactly the first executable Production Agent task for one worker. Later tasks cannot be claimed before the leading task resolves in canonical state.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"}, "actor": {"type": "string"}}, "required": ["project", "scene", "run_id"]},
+    },
+    {
+        "name": "control_production_run",
+        "description": "Pause, resume, cancel, release, fail, or explicitly retry a Production Agent task. It never marks creative work complete; canonical refresh decides that.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"}, "action": {"type": "string", "enum": ["pause", "resume", "cancel", "release_task", "fail_task", "retry_task"]}, "task_id": {"type": "string"}, "claim_token": {"type": "string"}, "error": {"type": "string"}, "actor": {"type": "string"}}, "required": ["project", "scene", "run_id", "action"]},
+    },
+    {
+        "name": "claim_production_work_order",
+        "description": "Claim the first automatically executable Production Agent task and return a read-only Codex work order. Prompt, QA/review, blocked, and approval work is not auto-claimed.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"}, "actor": {"type": "string"}}, "required": ["project", "scene", "run_id"]},
+    },
+    {
+        "name": "submit_production_work_proposal",
+        "description": "Validate and apply one claimed worker proposal through the exact allowlisted semantic tool, then re-read HAP. It cannot approve work, bypass QA, perform low-level HAP writes, or mark a task complete.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string"}, "scene": {"type": "string"}, "run_id": {"type": "string"},
+                "task_id": {"type": "string"}, "claim_token": {"type": "string"}, "proposal": {"type": "object"}, "actor": {"type": "string"}
+            },
+            "required": ["project", "scene", "run_id", "task_id", "claim_token", "proposal"]
+        },
+    },
+    {
+        "name": "prepare_scene",
+        "description": "Build a production-aware work plan for one scene. Returns Generate-ready status, blockers, stale objects, and ordered next actions without writing fake completion state.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project", "scene"]},
+    },
+    {
+        "name": "get_generate_ready",
+        "description": "Read the canonical Production Object readiness model for one scene: Scene Analysis, Written Conti, References, Storyboard/Shots, Video Prompts, and optional Handoff Package.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project", "scene"]},
+    },
+    {
+        "name": "prepare_stale_regeneration",
+        "description": "Return an ordered regeneration plan for stale Production Objects, including the exact current revision that must be replaced. This plans regeneration; it does not claim new creative output exists.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project", "scene"]},
+    },
+    {
+        "name": "save_production_object",
+        "description": "Create or revise a semantic FilmMate Production Object under a scene. Dependencies are resolved to their latest canonical revisions automatically. expected_revision_id is required and must be null only when creating a new object.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string"}, "scene": {"type": "string"},
+                "object_type": {"type": "string", "enum": ["beat", "cut", "block", "asset", "prompt", "package"]},
+                "key": {"type": "string"},
+                "stage": {"type": "string", "enum": ["conti", "assets", "storyboard", "prompts", "handoff"]},
+                "payload": {"type": "object"}, "source_evidence": {"type": "object"},
+                "dependencies": {
+                    "type": "array",
+                    "items": {"type": "object", "properties": {
+                        "entity_id": {"type": "string"}, "object_type": {"type": "string"}, "key": {"type": "string"}, "role": {"type": "string"}
+                    }}
+                },
+                "expected_revision_id": {"type": ["string", "null"]},
+                "idempotency_key": {"type": "string"}, "producer": {"type": "string"}
+            },
+            "required": ["project", "scene", "object_type", "key", "payload", "source_evidence", "expected_revision_id"]
+        },
+    },
+    {
+        "name": "approve_production_object",
+        "description": "Approve the current verified revision of a Production Object using an explicit delegated user-policy grant. Stale, blocked, unverified, or superseded revisions cannot be approved.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string"}, "scene": {"type": "string"},
+                "entity_id": {"type": "string"}, "object_type": {"type": "string"}, "key": {"type": "string"},
+                "approver": {"type": "string"}, "evidence": {"type": "string"}, "delegated_grant_id": {"type": "string"}, "approval_id": {"type": "string"}
+            },
+            "required": ["project", "scene", "approver", "evidence", "delegated_grant_id"]
+        },
+    },
+]
+
+TOOLS = SEMANTIC_TOOLS + [
     {"name": "list_scene_projects", "description": "List contained FilmMake projects.", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "get_scene_status", "description": "Read the shared DB-regenerated stage projection; legacy files are evidence-only.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project"]}},
     {"name": "start_next_scene_stage", "description": "Read the next unresolved gate without writing a stage or completion value.", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}, "scene": {"type": "string"}}, "required": ["project"]}},

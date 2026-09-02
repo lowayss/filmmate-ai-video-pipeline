@@ -13,6 +13,9 @@
     "productName": "FilmMate",
     "files": [
       "main.cjs",
+      "project-paths.cjs",
+      "python-bridge.cjs",
+      "production-state.cjs",
       "preload.cjs",
       "index.html",
       "seedance-facs.js",
@@ -26,7 +29,9 @@
       "micro-shot.css",
       "micro-shot-ui.js",
       "codex-worker.cjs",
+      "production-agent-worker.cjs",
       "prompt-bundle.schema.json",
+      "production-agent-action.schema.json",
       "package.json"
     ],
     "extraResources": [

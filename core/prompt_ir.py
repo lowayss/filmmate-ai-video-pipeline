@@ -71,6 +71,7 @@ def ir_sha256(data):
 
 def _protected_strings(source_prompt, provided=()):
     source = str(source_prompt or "")
+    provided = provided if isinstance(provided, (list, tuple, set)) else ()
     patterns = (
         r"@(?:Image|Video|Audio)\s+\d+",
         r"CUT\s+[A-Za-z_-]*\d+[A-Za-z0-9_-]*",
@@ -92,13 +93,20 @@ def _reference_tag(reference, index):
     return str(reference.get("tag") or f"@Image {index}")
 
 
+def _strict_int(value):
+    """Return True only for real ints, excluding bool (a Python int subclass)."""
+    return type(value) is int
+
+
 def expected_reference_tags(references):
     """Get the exact prompt tokens for references in their external order."""
     return [value[0] for value in micro_shot.expected_reference_values(references)]
 
 
 def validate_ir(data, project_root: Path | None = None, request=None):
-    request = request or {}
+    if not isinstance(data, dict):
+        return ["E_IR_DOCUMENT_INVALID"]
+    request = request if isinstance(request, dict) else {}
     errors = []
     required = (
         "schema_version", "project_id", "scene_id", "scope", "target_id", "input_mode",
@@ -110,21 +118,21 @@ def validate_ir(data, project_root: Path | None = None, request=None):
             errors.append(f"E_IR_FIELD_MISSING:{key}")
     if data.get("schema_version") != SCHEMA_VERSION:
         errors.append("E_IR_SCHEMA_VERSION")
-    if data.get("scope") not in ALLOWED_SCOPES:
+    scope = data.get("scope")
+    if scope not in ALLOWED_SCOPES:
         errors.append("E_IR_SCOPE_INVALID")
-    if data.get("scope") == "cut":
-        data["scope"] = "shot"
+    effective_scope = "shot" if scope == "cut" else scope
     if data.get("input_mode") not in {"text_to_video", "reference_to_video"}:
         errors.append("E_IR_INPUT_MODE_INVALID")
     request_mode = request.get("input_mode") or ("reference_to_video" if request.get("references") else "text_to_video")
     if data.get("input_mode") != request_mode:
         errors.append("E_IR_INPUT_MODE_REQUEST_MISMATCH")
     duration = data.get("duration_ms")
-    if not isinstance(duration, int) or duration <= 0:
+    if not _strict_int(duration) or duration <= 0:
         errors.append("E_IR_DURATION_INVALID")
         duration = 0
     request_duration = request.get("duration_ms")
-    if isinstance(request_duration, int) and request_duration > 0 and duration != request_duration:
+    if _strict_int(request_duration) and request_duration > 0 and duration != request_duration:
         errors.append(f"E_IR_DURATION_REQUEST_MISMATCH:{request_duration}:{duration}")
     profile = data.get("model_profile")
     if not isinstance(profile, dict) or not str(profile.get("name") or "").strip():
@@ -133,11 +141,11 @@ def validate_ir(data, project_root: Path | None = None, request=None):
     elif request.get("model") and profile.get("name") != request.get("model"):
         errors.append("E_IR_MODEL_MISMATCH")
     verified_max = profile.get("verified_max_duration_ms")
-    if isinstance(verified_max, int) and verified_max > 0 and duration > verified_max:
+    if _strict_int(verified_max) and verified_max > 0 and duration > verified_max:
         errors.append("E_IR_VERIFIED_DURATION_LIMIT")
 
     expected_scope = request.get("unit_type")
-    if expected_scope and data.get("scope") != expected_scope:
+    if expected_scope and effective_scope != expected_scope:
         errors.append("E_IR_SCOPE_REQUEST_MISMATCH")
     if request.get("target_id") and data.get("target_id") != request.get("target_id"):
         errors.append("E_IR_TARGET_REQUEST_MISMATCH")
@@ -165,7 +173,7 @@ def validate_ir(data, project_root: Path | None = None, request=None):
             actual_cut_ids.append(cut_id)
         start = segment.get("start_ms")
         end = segment.get("end_ms")
-        if not isinstance(start, int) or not isinstance(end, int) or start < 0 or end <= start or end > duration:
+        if not _strict_int(start) or not _strict_int(end) or start < 0 or end <= start or end > duration:
             errors.append(f"E_IR_TIME_RANGE:{index}")
         else:
             if start != previous_end:
@@ -226,12 +234,15 @@ def validate_ir(data, project_root: Path | None = None, request=None):
                 errors.append(f"E_IR_REFERENCE_FIELD:{index}:{field}")
         if index <= len(request_references):
             expected = request_references[index - 1]
-            if reference.get("sha256") != expected.get("sha256"):
-                errors.append(f"E_IR_REFERENCE_HASH_MISMATCH:{index}")
-            if reference.get("role") != expected.get("role"):
-                errors.append(f"E_IR_REFERENCE_ROLE_MISMATCH:{index}")
-            if reference.get("tag") != expected.get("tag"):
-                errors.append(f"E_IR_REFERENCE_TAG_MISMATCH:{index}")
+            if not isinstance(expected, dict):
+                errors.append(f"E_IR_REQUEST_REFERENCE_INVALID:{index}")
+            else:
+                if reference.get("sha256") != expected.get("sha256"):
+                    errors.append(f"E_IR_REFERENCE_HASH_MISMATCH:{index}")
+                if reference.get("role") != expected.get("role"):
+                    errors.append(f"E_IR_REFERENCE_ROLE_MISMATCH:{index}")
+                if reference.get("tag") != expected.get("tag"):
+                    errors.append(f"E_IR_REFERENCE_TAG_MISMATCH:{index}")
         if project_root is not None and reference.get("path"):
             source = (project_root.expanduser().resolve() / reference["path"]).resolve()
             try:
@@ -261,9 +272,15 @@ def _count_line_marker(prompt, marker):
 
 
 def validate_prompt_bundle(request, prompt_ir, variants):
+    request = request if isinstance(request, dict) else {}
     issues = validate_ir(prompt_ir, request=request)
     checks = {
-        "ir_schema": not any(issue.startswith("E_IR_SCHEMA") or issue.startswith("E_IR_FIELD") for issue in issues),
+        "ir_schema": not any(
+            issue.startswith("E_IR_SCHEMA")
+            or issue.startswith("E_IR_FIELD")
+            or issue == "E_IR_DOCUMENT_INVALID"
+            for issue in issues
+        ),
         "ir_context": not any("REQUEST_MISMATCH" in issue for issue in issues),
         "timeline_contiguous": not any("E_IR_TIME" in issue or "E_IR_TIMELINE" in issue for issue in issues),
         "one_action_one_camera": not any("MULTIPLE_CENTRAL_ACTIONS" in issue or "MULTIPLE_CAMERA_ACTIONS" in issue for issue in issues),
@@ -336,17 +353,22 @@ def render_prompt(data, language="ko"):
 
 
 def compile_package(ir_path: Path, project_root: Path, output: Path):
+    ir_path = ir_path.expanduser().resolve()
+    project_root = project_root.expanduser().resolve()
+    output = output.expanduser().resolve()
     data = json.loads(ir_path.read_text(encoding="utf-8"))
     errors = validate_ir(data, project_root)
     if errors:
         raise SystemExit("\n".join(errors))
+    if output.exists() and not output.is_dir():
+        raise SystemExit("output package path must be a directory")
     if output.exists() and any(output.iterdir()):
         raise SystemExit("output package directory must be empty")
     refs_dir = output / "references"
     refs_dir.mkdir(parents=True, exist_ok=True)
     manifest_refs = []
     for reference in data["references"]:
-        source = project_root / reference["path"]
+        source = (project_root / reference["path"]).resolve()
         suffix = source.suffix.lower() or ".bin"
         name = f"{reference['order']:02d}_{reference['role']}{suffix}"
         shutil.copyfile(source, refs_dir / name)

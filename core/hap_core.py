@@ -12,7 +12,8 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+MIN_SUPPORTED_SCHEMA_VERSION = 2
 CREATIVE_TYPES = {"scene", "beat", "cut", "block", "asset", "prompt", "package", "generation", "delivery"}
 ENTITY_TYPES = {"project", *CREATIVE_TYPES}
 APPROVER_TYPES = {"user", "delegated_user_policy"}
@@ -139,6 +140,100 @@ CREATE INDEX IF NOT EXISTS idx_prompt_job_state ON prompt_jobs(state, updated_at
 CREATE INDEX IF NOT EXISTS idx_prompt_job_events ON prompt_job_events(job_id, event_id);
 """
 
+HAP_IDENTITY_COLUMNS = {
+    "meta": {"key", "value"},
+    "entities": {"entity_id", "entity_type", "logical_key"},
+    "revisions": {"revision_id", "entity_id", "rev_no"},
+}
+
+
+def _table_exists(db: sqlite3.Connection, table: str) -> bool:
+    return db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone() is not None
+
+
+def _table_columns(db: sqlite3.Connection, table: str) -> set[str]:
+    if not _table_exists(db, table):
+        return set()
+    return {str(row[1]) for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _assert_hap_identity(db: sqlite3.Connection):
+    missing_tables = [table for table in HAP_IDENTITY_COLUMNS if not _table_exists(db, table)]
+    if missing_tables:
+        raise ValueError(f"E_HAP_SCHEMA_IDENTITY_MISSING:{','.join(missing_tables)}")
+    for table, required_columns in HAP_IDENTITY_COLUMNS.items():
+        missing_columns = sorted(required_columns - _table_columns(db, table))
+        if missing_columns:
+            raise ValueError(f"E_HAP_SCHEMA_IDENTITY_INVALID:{table}:{','.join(missing_columns)}")
+
+
+def _stored_schema_version(db: sqlite3.Connection) -> int:
+    _assert_hap_identity(db)
+    row = db.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+    if row is None:
+        raise ValueError("E_HAP_SCHEMA_IDENTITY_MISSING:schema_version")
+    try:
+        version = int(row["value"])
+    except (TypeError, ValueError, KeyError, IndexError):
+        raise ValueError("E_HAP_SCHEMA_VERSION_INVALID")
+    if version < MIN_SUPPORTED_SCHEMA_VERSION:
+        raise ValueError(f"E_HAP_SCHEMA_TOO_OLD:{version}:{MIN_SUPPORTED_SCHEMA_VERSION}")
+    return version
+
+
+def _set_schema_version(db: sqlite3.Connection, version: int):
+    db.execute(
+        "INSERT INTO meta(key,value) VALUES('schema_version',?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (str(version),),
+    )
+
+
+def _migrate_to_v3(db: sqlite3.Connection):
+    # The v3 transition was historically additive. DDL is applied before this
+    # step so existing v2 projects receive those tables without data rewrites.
+    return None
+
+
+def _migrate_to_v4(db: sqlite3.Connection):
+    if not _table_exists(db, "production_agent_tasks"):
+        return
+    columns = _table_columns(db, "production_agent_tasks")
+    if "claim_lease_seconds" not in columns:
+        db.execute("ALTER TABLE production_agent_tasks ADD COLUMN claim_lease_seconds INTEGER")
+
+
+SCHEMA_MIGRATIONS = {
+    3: _migrate_to_v3,
+    4: _migrate_to_v4,
+}
+
+
+def migrate_schema(db: sqlite3.Connection) -> int:
+    current = _stored_schema_version(db)
+    if current > SCHEMA_VERSION:
+        raise ValueError(f"E_HAP_SCHEMA_NEWER:{current}:{SCHEMA_VERSION}")
+
+    try:
+        # Put additive DDL, explicit migration steps, and schema-version updates
+        # in one write transaction so a failure cannot leave a half-migrated DB.
+        db.executescript("BEGIN IMMEDIATE;\n" + DDL)
+        for target in range(current + 1, SCHEMA_VERSION + 1):
+            migration = SCHEMA_MIGRATIONS.get(target)
+            if migration is None:
+                raise ValueError(f"E_HAP_SCHEMA_MIGRATION_MISSING:{target}")
+            migration(db)
+            _set_schema_version(db, target)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return SCHEMA_VERSION
+
+
 def now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -162,15 +257,11 @@ def connect(root: Path) -> sqlite3.Connection:
     db = sqlite3.connect(path)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys=ON")
-    # Existing HAP v2 projects receive additive tables without rewriting their
-    # canonical data or projections.
-    db.executescript(DDL)
-    db.execute(
-        "INSERT INTO meta(key,value) VALUES('schema_version',?) "
-        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-        (str(SCHEMA_VERSION),),
-    )
-    db.commit()
+    try:
+        migrate_schema(db)
+    except Exception:
+        db.close()
+        raise
     return db
 
 def new_id(prefix: str, seed: str) -> str:
@@ -189,14 +280,35 @@ def artifact_rows(db, revision_id):
 def current_map(db):
     return {row["entity_id"]: row for row in db.execute("SELECT r.* FROM revisions r JOIN (SELECT entity_id, MAX(rev_no) n FROM revisions GROUP BY entity_id) x ON x.entity_id=r.entity_id AND x.n=r.rev_no")}
 
+def dependency_details(db, revision_id, currents):
+    rows = db.execute(
+        "SELECT d.upstream_revision_id,d.role,r.entity_id,e.entity_type,e.logical_key,r.rev_no "
+        "FROM dependencies d "
+        "JOIN revisions r ON r.revision_id=d.upstream_revision_id "
+        "JOIN entities e ON e.entity_id=r.entity_id "
+        "WHERE d.downstream_revision_id=? "
+        "ORDER BY d.role,e.entity_type,e.logical_key,d.upstream_revision_id",
+        (revision_id,),
+    ).fetchall()
+    details = []
+    for row in rows:
+        current = currents.get(row["entity_id"])
+        current_revision_id = current["revision_id"] if current is not None else None
+        details.append({
+            "role": row["role"],
+            "upstream_entity_id": row["entity_id"],
+            "upstream_entity_type": row["entity_type"],
+            "upstream_logical_key": row["logical_key"],
+            "used_revision_id": row["upstream_revision_id"],
+            "used_rev_no": row["rev_no"],
+            "current_revision_id": current_revision_id,
+            "current_rev_no": current["rev_no"] if current is not None else None,
+            "stale": current_revision_id != row["upstream_revision_id"],
+        })
+    return details
+
 def dependency_stale(db, revision_id, currents):
-    deps = db.execute("SELECT upstream_revision_id FROM dependencies WHERE downstream_revision_id=?", (revision_id,)).fetchall()
-    for dep in deps:
-        upstream = db.execute("SELECT entity_id FROM revisions WHERE revision_id=?", (dep[0],)).fetchone()
-        current = currents.get(upstream[0])
-        if not upstream or current is None or current["revision_id"] != dep[0]:
-            return True
-    return False
+    return any(item["stale"] for item in dependency_details(db, revision_id, currents))
 
 def artifact_errors(root, db, revision_id):
     errors = []
@@ -397,8 +509,14 @@ def derive_state(root, db, entity, revision, currents):
     blockers = db.execute("SELECT code,reason FROM blockers WHERE revision_id=? AND resolved_at IS NULL", (revision["revision_id"],)).fetchall()
     if blockers: return {"state": "blocked", "errors": [f"{x['code']}: {x['reason']}" for x in blockers]}
     errors = artifact_errors(root, db, revision["revision_id"])
-    if dependency_stale(db, revision["revision_id"], currents):
-        return {"state": "stale", "errors": ["an upstream revision changed", *errors]}
+    stale_dependencies = [item for item in dependency_details(db, revision["revision_id"], currents) if item["stale"]]
+    if stale_dependencies:
+        stale_errors = [
+            f"{item['role']}: {item['upstream_entity_type']} {item['upstream_logical_key']} changed "
+            f"from {item['used_revision_id']} to {item['current_revision_id'] or 'missing'}"
+            for item in stale_dependencies
+        ]
+        return {"state": "stale", "errors": [*stale_errors, *errors]}
     errors.extend(contract_errors(db, entity["entity_type"], revision["revision_id"]))
     if errors: return {"state": "working" if not artifact_rows(db, revision["revision_id"]) else "unverified", "errors": errors}
     qa = latest_passing_qa(root, db, revision["revision_id"])
@@ -417,7 +535,8 @@ def write_projection(root, db):
         revision = currents.get(entity["entity_id"])
         state = derive_state(root, db, entity, revision, currents)
         artifacts = [dict(x) for x in artifact_rows(db, revision["revision_id"])] if revision else []
-        entities.append({**dict(entity), "current_revision": row_dict(revision), **state, "artifacts": artifacts})
+        dependencies = dependency_details(db, revision["revision_id"], currents) if revision else []
+        entities.append({**dict(entity), "current_revision": row_dict(revision), **state, "artifacts": artifacts, "dependencies": dependencies})
     source_links = [dict(row) for row in db.execute(
         "SELECT source_id, project_id, label, kind, path, required, status, fingerprint, metadata_json, checked_at, created_at "
         "FROM source_links ORDER BY required DESC, kind, label"
@@ -619,7 +738,7 @@ def cmd_check_sources(args):
     print(json.dumps({"source_links": checked, "projection": projection}, ensure_ascii=False))
 
 def parser():
-    p=argparse.ArgumentParser(description="HAP v3 canonical production state"); sub=p.add_subparsers(dest="command",required=True)
+    p=argparse.ArgumentParser(description="HAP v4 canonical production state"); sub=p.add_subparsers(dest="command",required=True)
     x=sub.add_parser("init"); x.add_argument("project"); x.add_argument("--title",required=True); x.add_argument("--project-id"); x.add_argument("--mode",choices=["full","asset-only","storyboard-only","prompt-only"],default="full"); x.set_defaults(fn=cmd_init)
     x=sub.add_parser("add-entity"); x.add_argument("project"); x.add_argument("--type",dest="entity_type",required=True,choices=sorted(ENTITY_TYPES)); x.add_argument("--key",required=True); x.add_argument("--entity-id"); x.add_argument("--parent"); x.add_argument("--mode",default="full"); x.set_defaults(fn=cmd_add_entity)
     x=sub.add_parser("commit"); x.add_argument("project"); x.add_argument("--entity",required=True); x.add_argument("--producer",required=True); x.add_argument("--payload",required=True); x.add_argument("--evidence",required=True); x.add_argument("--depends-on",action="append",default=[]); x.add_argument("--revision-id"); x.set_defaults(fn=cmd_commit)

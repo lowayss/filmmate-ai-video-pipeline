@@ -15,10 +15,16 @@ const {
   promptHistory,
 } = require("./prompt-job-client.cjs");
 const {startCodexPromptJob, cancelCodexPromptJob} = require("./codex-worker.cjs");
+const {startProductionAgentWorker, cancelProductionAgentWorker, activeProductionAgentWorkers} = require("./production-agent-worker.cjs");
+const {createProjectPathResolver} = require("./project-paths.cjs");
+const {createPythonBridge} = require("./python-bridge.cjs");
+const {buildSceneProductionState} = require("./production-state.cjs");
 
 const DOCUMENT_WORKSPACE = path.join(app.getPath("documents"), "영화작업용", "scene-package-builder");
 const ROOT = fs.existsSync(DOCUMENT_WORKSPACE) ? DOCUMENT_WORKSPACE : path.resolve(__dirname, "..");
 const PACKAGES = path.join(ROOT, "packages");
+const projectPaths = createProjectPathResolver(PACKAGES);
+const pythonBridge = createPythonBridge({root:ROOT, resourcesPath:process.resourcesPath});
 const CODEX_SKILL_ROOT = path.join(os.homedir(), ".codex", "skills");
 const CODEX_SOURCES = [
   { key: "sihap", label: "시합 · 시나리오", kind: "skill", required: true },
@@ -64,48 +70,33 @@ function readJsonl(file) {
 }
 
 function hapScriptPath() {
-  const workspace = path.join(ROOT, "core", "hap_core.py");
-  const bundled = path.join(process.resourcesPath, "core", "hap_core.py");
-  return fs.existsSync(workspace) ? workspace : bundled;
+  return pythonBridge.hapScriptPath();
 }
 
 function runHap(projectDir, args) {
-  const python = process.env.FILMMATE_PYTHON || process.env.SCENEFLOW_PYTHON || "/usr/bin/python3";
-  const run = childProcess.spawnSync(python, [hapScriptPath(), ...args], { encoding: "utf8" });
-  if (run.status !== 0) throw new Error((run.stderr || run.stdout || "hap_command_failed").trim());
-  return run.stdout.trim();
+  return pythonBridge.runHap(projectDir, args);
 }
 
-function documentBridgePath() {
-  const workspace = path.join(ROOT, "core", "filmmate_documents.py");
-  const bundled = path.join(process.resourcesPath, "core", "filmmate_documents.py");
-  return fs.existsSync(workspace) ? workspace : bundled;
+function runHapAsync(projectDir, args) {
+  return pythonBridge.runHapAsync(projectDir, args);
 }
 
 function runDocumentBridge(command, payload) {
-  const python = process.env.FILMMATE_PYTHON || process.env.SCENEFLOW_PYTHON || "/usr/bin/python3";
-  const run = childProcess.spawnSync(python, [documentBridgePath(), command], {
-    encoding: "utf8",
-    input: JSON.stringify(payload),
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  let result = null;
-  try { result = JSON.parse(String(run.stdout || "").trim()); }
-  catch { /* handled below with the process error */ }
-  if (run.status !== 0 || !result?.ok) {
-    throw new Error(result?.error || String(run.stderr || run.stdout || "document_bridge_failed").trim());
-  }
-  return result;
+  return pythonBridge.runDocumentBridge(command, payload);
 }
 
-function connectCodexSources(projectDir) {
+function runDocumentBridgeAsync(command, payload) {
+  return pythonBridge.runDocumentBridgeAsync(command, payload);
+}
+
+async function connectCodexSources(projectDir) {
   const connected = [];
   for (const source of CODEX_SOURCES) {
     const sourcePath = path.join(CODEX_SKILL_ROOT, source.key);
-    const output = runHap(projectDir, ["link-source", projectDir, "--path", sourcePath, "--label", source.label, "--kind", source.kind, ...(source.required ? ["--required"] : []), "--source-id", `codex:${source.key}`]);
+    const output = await runHapAsync(projectDir, ["link-source", projectDir, "--path", sourcePath, "--label", source.label, "--kind", source.kind, ...(source.required ? ["--required"] : []), "--source-id", `codex:${source.key}`]);
     connected.push({ key: source.key, path: sourcePath, source_id: output });
   }
-  const checked = runHap(projectDir, ["check-sources", projectDir]);
+  const checked = await runHapAsync(projectDir, ["check-sources", projectDir]);
   return { connected, check: JSON.parse(checked) };
 }
 
@@ -154,6 +145,8 @@ function readProjects() {
             const hasArtifactRole = role => (artifacts?.artifacts || []).some(a => a.role === role);
             const sceneEntity = hapProjection?.entities?.find(entity => entity.entity_type === "scene" && (entity.logical_key === manifest.scene_id || entity.logical_key === scene.name));
             const childEntities = sceneEntity ? (hapProjection.entities || []).filter(entity => entity.parent_id === sceneEntity.entity_id) : [];
+            const scenePromptJobs = (hapProjection?.prompt_jobs || []).filter(job => job.scene_key === manifest.scene_id || job.scene_key === scene.name);
+            const production = sceneEntity ? buildSceneProductionState({sceneEntity, childEntities, promptJobs:scenePromptJobs}) : null;
             const aggregate = (types, empty = "pending") => {
               const values = childEntities.filter(entity => types.includes(entity.entity_type));
               if (!values.length) return empty;
@@ -188,7 +181,8 @@ function readProjects() {
               scene_duration: breakdown?.duration_sec ? `${breakdown.duration_sec}s` : manifest.scene_duration,
               project: entry.name,
               path: sceneDir,
-              progress: stages.length ? Math.round(done / stages.length * 100) : 0,
+              production,
+              progress: production?.progress ?? (stages.length ? Math.round(done / stages.length * 100) : 0),
               state_source: sceneEntity ? "hap-v2" : "legacy-evidence-only",
             };
           }).filter(Boolean)
@@ -199,19 +193,68 @@ function readProjects() {
 
 ipcMain.handle("projects:list", () => readProjects());
 
-ipcMain.handle("project:connect-codex-sources", (_event, project) => {
-  const projectDir = path.join(PACKAGES, project);
-  if (!fs.existsSync(path.join(projectDir, ".hap", "hap.sqlite3"))) throw new Error("hap_project_not_found");
-  return connectCodexSources(projectDir);
+ipcMain.handle("project:connect-codex-sources", async (_event, project) => {
+  let projectDir;
+  try { projectDir = projectPaths.resolveHapProject(project); }
+  catch { throw new Error("hap_project_not_found"); }
+  return await connectCodexSources(projectDir);
+});
+
+function productionAgentPayload(project, scene, request = {}) {
+  const projectDir = projectPaths.resolveHapProject(project);
+  const {sceneDir} = projectPaths.resolveScene(project, scene);
+  const manifest = readJson(path.join(sceneDir, "scene-data", "scene-manifest.json")) || {};
+  return {
+    project_root: projectDir,
+    scene_aliases: [scene, sceneDir.name, manifest.scene_id].filter(Boolean),
+    ...request,
+  };
+}
+
+ipcMain.handle("production-agent:run", async (_event, project, scene, request = {}) => {
+  return await pythonBridge.runProductionAgentAsync(productionAgentPayload(project, scene, {
+    action:"plan",
+    goal:request?.goal,
+    target:request?.target,
+    previous_checkpoint:request?.previous_checkpoint,
+  }));
+});
+ipcMain.handle("production-agent:start-run", async (_event, project, scene, request = {}) => {
+  return await pythonBridge.runProductionAgentAsync(productionAgentPayload(project, scene, {...request, action:"start_run", actor:"filmmate-user"}));
+});
+ipcMain.handle("production-agent:get-run", async (_event, project, scene, runId) => {
+  const request = runId ? {action:"get_run", run_id:runId, actor:"filmmate-user"} : {action:"latest_run", actor:"filmmate-user"};
+  return await pythonBridge.runProductionAgentAsync(productionAgentPayload(project, scene, request));
+});
+ipcMain.handle("production-agent:control-run", async (_event, project, scene, request = {}) => {
+  return await pythonBridge.runProductionAgentAsync(productionAgentPayload(project, scene, {...request, action:"control_run", actor:"filmmate-user"}));
+});
+ipcMain.handle("production-agent:start-worker", async (_event, project, scene, runId) => {
+  const basePayload = productionAgentPayload(project, scene);
+  const sendEvent = event => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send("production-agent:worker-event", {project, scene, ...event});
+    }
+  };
+  return startProductionAgentWorker({
+    projectDir: basePayload.project_root,
+    bridge: pythonBridge,
+    basePayload,
+    runId,
+    onEvent: sendEvent,
+  });
+});
+ipcMain.handle("production-agent:cancel-worker", async (_event, runId) => {
+  return await cancelProductionAgentWorker(runId);
+});
+ipcMain.handle("production-agent:worker-status", (_event, runId) => {
+  const active = activeProductionAgentWorkers();
+  return {run_id:String(runId || ""), active:active.includes(String(runId || "")), active_run_ids:active};
 });
 
 ipcMain.handle("project:delete", async (_event, project) => {
   const projectName = String(project || "");
-  const projectDir = path.resolve(PACKAGES, projectName);
-  const relative = path.relative(path.resolve(PACKAGES), projectDir);
-  if (!projectName.startsWith("PROJECT_") || !relative || relative.startsWith("..") || path.isAbsolute(relative) || !fs.existsSync(projectDir) || !fs.statSync(projectDir).isDirectory()) {
-    throw new Error("invalid_project_target");
-  }
+  const projectDir = projectPaths.resolveProject(projectName);
   const owner = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
   const answer = await dialog.showMessageBox(owner, {
     type: "warning",
@@ -271,9 +314,10 @@ function listSceneAssetLibrary(sceneDir, project, scene) {
   return {path:accessPath, sourcePath:assetFolder.path, kind:assetFolder.kind, files};
 }
 
-ipcMain.handle("scene:detail", (_event, project, scene) => {
-  const sceneDir = path.join(PACKAGES, project, "scenes", scene);
-  const projectDir = path.join(PACKAGES, project);
+ipcMain.handle("scene:detail", async (_event, project, scene) => {
+  let projectDir, sceneDir;
+  try { ({projectDir, sceneDir} = resolveSceneTarget(project, scene)); }
+  catch { throw new Error("scene_not_found"); }
   const manifest = readJson(path.join(sceneDir, "scene-data", "scene-manifest.json"));
   const artifacts = readJson(path.join(sceneDir, "scene-data", "artifacts.json"));
   if (!manifest || !fs.existsSync(sceneDir)) throw new Error("scene_not_found");
@@ -295,7 +339,7 @@ ipcMain.handle("scene:detail", (_event, project, scene) => {
   const conhapProject = readJson(path.join(preferredConhapDir, "project.json"));
   const hapProjection = readJson(path.join(projectDir, ".hap", "projection.json"));
   const canonicalDocuments = fs.existsSync(path.join(projectDir, ".hap", "hap.sqlite3"))
-    ? runDocumentBridge("read", {project_root:projectDir, scene})
+    ? await runDocumentBridgeAsync("read", {project_root:projectDir, scene})
     : null;
   const documents = canonicalDocuments?.documents || {
     screenplay:{kind:"screenplay",content:legacySourceText,revision_id:null,canonical:false,source:"legacy-projection",projection_path:"input-screenplay.txt"},
@@ -304,6 +348,8 @@ ipcMain.handle("scene:detail", (_event, project, scene) => {
   const sourceText = documents.screenplay?.content ?? legacySourceText;
   const sceneEntity = (hapProjection?.entities || []).find(entity => entity.entity_type === "scene" && (entity.logical_key === manifest.scene_id || entity.logical_key === scene));
   const sceneChildren = sceneEntity ? (hapProjection.entities || []).filter(entity => entity.parent_id === sceneEntity.entity_id) : [];
+  const scenePromptJobs = (hapProjection?.prompt_jobs || []).filter(job => job.scene_key === manifest.scene_id || job.scene_key === scene);
+  const production = sceneEntity ? buildSceneProductionState({sceneEntity, childEntities:sceneChildren, promptJobs:scenePromptJobs}) : null;
   const assetLibrary = listSceneAssetLibrary(sceneDir, project, scene);
   const conhap = {
     dir: path.basename(preferredConhapDir),
@@ -329,12 +375,13 @@ ipcMain.handle("scene:detail", (_event, project, scene) => {
     sourceText,
     documents,
     conhap,
+    production,
     hap:{
       schema_version:hapProjection?.schema_version || null,
       scene_revision_id:sceneEntity?.current_revision?.revision_id || null,
       conhap_entity_id:documents.conti?.entity_id || null,
       conhap_revision_id:documents.conti?.revision_id || null,
-      entities:sceneChildren.map(entity => ({entity_id:entity.entity_id,entity_type:entity.entity_type,logical_key:entity.logical_key,current_revision_id:entity.current_revision?.revision_id || null,state:entity.state})),
+      entities:sceneChildren.map(entity => ({entity_id:entity.entity_id,entity_type:entity.entity_type,logical_key:entity.logical_key,current_revision_id:entity.current_revision?.revision_id || null,state:entity.state,errors:entity.errors || [],dependencies:entity.dependencies || []})),
     },
     assetLibrary,
     artifacts: (artifacts?.artifacts || []).map(artifact => {
@@ -345,7 +392,7 @@ ipcMain.handle("scene:detail", (_event, project, scene) => {
   };
 });
 
-ipcMain.handle("scene:save-document", (_event, project, scene, request) => {
+ipcMain.handle("scene:save-document", async (_event, project, scene, request) => {
   const {projectDir} = resolveSceneTarget(project, scene);
   if (!fs.existsSync(path.join(projectDir, ".hap", "hap.sqlite3"))) throw new Error("hap_project_not_found");
   const kind = String(request?.kind || "");
@@ -354,7 +401,7 @@ ipcMain.handle("scene:save-document", (_event, project, scene, request) => {
   const expectedRevisionId = request?.expectedRevisionId ?? null;
   const expectedSceneRevisionId = request?.expectedSceneRevisionId ?? null;
   const requestHash = crypto.createHash("sha256").update(JSON.stringify({project,scene,kind,expectedRevisionId,expectedSceneRevisionId,content})).digest("hex");
-  return runDocumentBridge("save", {
+  return await runDocumentBridgeAsync("save", {
     project_root:projectDir,
     scene,
     kind,
@@ -373,13 +420,8 @@ ipcMain.handle("prompt:sync-handoff", (_event, payload) => {
   return enqueuePromptJob(projectDir, payload, skillPolicy);
 });
 function promptProjectDir(project) {
-  const projectName = String(project || "");
-  const projectDir = path.resolve(PACKAGES, projectName);
-  const relative = path.relative(path.resolve(PACKAGES), projectDir);
-  if (!projectName.startsWith("PROJECT_") || !relative || relative.startsWith("..") || path.isAbsolute(relative) || !fs.existsSync(path.join(projectDir, ".hap", "hap.sqlite3"))) {
-    throw new Error("hap_project_not_found");
-  }
-  return projectDir;
+  try { return projectPaths.resolveHapProject(project); }
+  catch { throw new Error("hap_project_not_found"); }
 }
 ipcMain.handle("prompt:get-job", (_event, project, jobId) => getPromptJob(promptProjectDir(project), String(jobId)));
 ipcMain.handle("prompt:start-codex", (_event, project, jobId, skillProvenance) => {
@@ -581,20 +623,7 @@ function userUploadBlockRoot(project, scene, model, blockId) {
 }
 
 function resolveSceneTarget(project, scene) {
-  const projectName = String(project || "");
-  const sceneName = String(scene || "");
-  const packagesRoot = path.resolve(PACKAGES);
-  const projectDir = path.resolve(packagesRoot, projectName);
-  const projectRelative = path.relative(packagesRoot, projectDir);
-  if (!projectName.startsWith("PROJECT_") || !projectRelative || projectRelative.startsWith("..") || path.isAbsolute(projectRelative) || !fs.existsSync(projectDir)) {
-    throw new Error("invalid_project_target");
-  }
-  const sceneDir = path.resolve(projectDir, "scenes", sceneName);
-  const sceneRelative = path.relative(projectDir, sceneDir);
-  if (!sceneName || sceneRelative.startsWith("..") || path.isAbsolute(sceneRelative) || !sceneRelative.startsWith(`scenes${path.sep}`) || !fs.existsSync(sceneDir)) {
-    throw new Error("invalid_scene_target");
-  }
-  return {projectDir, sceneDir};
+  return projectPaths.resolveScene(project, scene);
 }
 
 async function composeStoryboardSheet(items, outputPath) {
@@ -629,17 +658,7 @@ ipcMain.handle("image:copy-to-clipboard", (_event, source) => {
 ipcMain.handle("scene:open-assets-folder", async (_event, project, scene, blockId, model, items) => {
   const projectName = String(project || "");
   const sceneName = String(scene || "");
-  const packagesRoot = path.resolve(PACKAGES);
-  const projectDir = path.resolve(packagesRoot, projectName);
-  const projectRelative = path.relative(packagesRoot, projectDir);
-  if (!projectName.startsWith("PROJECT_") || !projectRelative || projectRelative.startsWith("..") || path.isAbsolute(projectRelative) || !fs.existsSync(projectDir)) {
-    throw new Error("invalid_project_target");
-  }
-  const sceneDir = path.resolve(projectDir, "scenes", sceneName);
-  const sceneRelative = path.relative(projectDir, sceneDir);
-  if (!sceneName || sceneRelative.startsWith("..") || path.isAbsolute(sceneRelative) || !sceneRelative.startsWith(`scenes${path.sep}`) || !fs.existsSync(sceneDir)) {
-    throw new Error("invalid_scene_target");
-  }
+  const {sceneDir} = resolveSceneTarget(projectName, sceneName);
   const assetFolder = findSceneAssetFolder(sceneDir);
   if (!assetFolder) throw new Error("asset_library_not_found");
   if (blockId) {
@@ -656,7 +675,7 @@ ipcMain.handle("scene:open-assets-folder", async (_event, project, scene, blockI
 });
 
 ipcMain.handle("storyboard:compose-block", async (_event, project, scene, blockId, items) => {
-  const sceneDir = path.join(PACKAGES, project, "scenes", scene);
+  const {sceneDir} = resolveSceneTarget(project, scene);
   const out = path.join(sceneDir, "artifacts", "storyboard_block", `${safeSlug(blockId)}_storyboard_combined.png`);
   const sources = (items || []).map(item=>path.resolve(item.absolutePath||"")).filter(source=>fs.existsSync(source));
   if (fs.existsSync(out) && sources.length && sources.every(source=>fs.statSync(out).mtimeMs>=fs.statSync(source).mtimeMs)) return {absolutePath:out,url:pathToFileURL(out).href,name:path.basename(out),cached:true};
@@ -665,7 +684,7 @@ ipcMain.handle("storyboard:compose-block", async (_event, project, scene, blockI
 });
 
 ipcMain.handle("storyboard:save-composite", (_event, project, scene, blockId, dataUrl) => {
-  const sceneDir = path.join(PACKAGES, project, "scenes", scene);
+  const {sceneDir} = resolveSceneTarget(project, scene);
   const out = path.join(sceneDir, "artifacts", "storyboard_block", `${safeSlug(blockId)}_storyboard_combined.png`);
   const match = String(dataUrl||"").match(/^data:image\/png;base64,(.+)$/);
   if (!match) throw new Error("invalid_composite_data");
@@ -675,8 +694,8 @@ ipcMain.handle("storyboard:save-composite", (_event, project, scene, blockId, da
 });
 
 ipcMain.handle("asset:pick-images", async (_event, project, scene, role) => {
-  if (fs.existsSync(path.join(PACKAGES, project, ".hap", "hap.sqlite3"))) throw new Error("E_CANONICAL_WRITE_REQUIRED: HAP 프로젝트의 에셋은 정확한 asset revision에 등록해야 합니다.");
-  const {sceneDir} = resolveSceneTarget(project, scene);
+  const {projectDir, sceneDir} = resolveSceneTarget(project, scene);
+  if (fs.existsSync(path.join(projectDir, ".hap", "hap.sqlite3"))) throw new Error("E_CANONICAL_WRITE_REQUIRED: HAP 프로젝트의 에셋은 정확한 asset revision에 등록해야 합니다.");
   const assetFolder = findSceneAssetFolder(sceneDir);
   const defaultPath = assetFolder ? prepareUserAssetAccess(assetFolder.path, project, scene) : sceneDir;
   const selected = await dialog.showOpenDialog({defaultPath,properties:["openFile","multiSelections"],filters:[{name:"Images",extensions:["png","jpg","jpeg","webp"]}]});
@@ -1001,9 +1020,8 @@ ipcMain.handle("ai:save-block-library", async (_event, project, scene, config) =
 });
 
 ipcMain.handle("ai:export-package", async (_event, project, scene, config) => {
-  const sceneDir = path.join(PACKAGES, project, "scenes", scene);
-  if (!fs.existsSync(sceneDir)) throw new Error("scene_not_found");
-  if (fs.existsSync(path.join(PACKAGES, project, ".hap", "hap.sqlite3"))) throw new Error("E_PROMPT_HAP_REQUIRED: HAP 프로젝트는 Prompt IR 검증과 release gate를 통과해야 패키지를 내보낼 수 있습니다.");
+  const {projectDir, sceneDir} = resolveSceneTarget(project, scene);
+  if (fs.existsSync(path.join(projectDir, ".hap", "hap.sqlite3"))) throw new Error("E_PROMPT_HAP_REQUIRED: HAP 프로젝트는 Prompt IR 검증과 release gate를 통과해야 패키지를 내보낼 수 있습니다.");
   const unitType = config.unitType === "block" ? "block" : "shot";
   const targetId = config.targetId || config.shotId;
   if (!targetId) throw new Error("target_not_selected");
@@ -1053,16 +1071,19 @@ ipcMain.handle("ai:export-package", async (_event, project, scene, config) => {
   return {path:out,version,mapping};
 });
 
-ipcMain.handle("scene:compile-workspace", (_event, project, scene) => {
-  if (fs.existsSync(path.join(PACKAGES, project, ".hap", "hap.sqlite3"))) throw new Error("E_CANONICAL_WRITE_REQUIRED: 레거시 workspace compiler는 HAP 프로젝트를 수정할 수 없습니다.");
+ipcMain.handle("scene:compile-workspace", async (_event, project, scene) => {
+  const {projectDir} = resolveSceneTarget(project, scene);
+  if (fs.existsSync(path.join(projectDir, ".hap", "hap.sqlite3"))) throw new Error("E_CANONICAL_WRITE_REQUIRED: 레거시 workspace compiler는 HAP 프로젝트를 수정할 수 없습니다.");
   const script = path.join(ROOT, "workspace_compiler.py");
-  const python = process.env.FILMMATE_PYTHON || process.env.SCENEFLOW_PYTHON || "/opt/homebrew/bin/python3";
-  const run = childProcess.spawnSync(python, [script, project, scene], { encoding: "utf8" });
-  if (run.status !== 0) throw new Error((run.stderr || "workspace_compile_failed").trim());
-  return JSON.parse(run.stdout);
+  const run = await pythonBridge.runPythonAsync(script, [project, scene]);
+  try {
+    return JSON.parse(String(run.stdout || "").trim());
+  } catch {
+    throw new Error(`E_WORKSPACE_COMPILE_RESPONSE_INVALID:${String(run.stdout || "").trim().slice(0, 500)}`);
+  }
 });
 
-ipcMain.handle("project:create", (_event, title, screenplay) => {
+ipcMain.handle("project:create", async (_event, title, screenplay) => {
   const analysis = analyzeScreenplay(screenplay || "");
   if (!analysis.scenes.length) throw new Error("씬 헤딩을 찾지 못했습니다");
   const slug = String(title || "untitled").replace(/[^0-9A-Za-z가-힣._-]+/g, "_").replace(/^_+|_+$/g, "") || "untitled";
@@ -1080,25 +1101,24 @@ ipcMain.handle("project:create", (_event, title, screenplay) => {
     fs.writeFileSync(path.join(sceneDir, "input-screenplay.txt"), scene.source_text, "utf8");
     fs.writeFileSync(path.join(sceneDir, "scene-data", "scene-manifest.json"), JSON.stringify({schema_version:"1.0",package_type:"scene",scene_id:scene.scene_id,title:scene.title,location:scene.location,time:scene.time,scene_duration:`${scene.estimated_duration_sec}s`,block_duration:"15초",source_span:{start:scene.source_start,end:scene.source_end},pipeline:{analysis:"legacy_claim",text_conti:"pending",assets:"pending",storyboard:"pending",prompts:"pending",qa:"pending"},read_only_projection:true},null,2), "utf8");
   }
-  const hapScript = hapScriptPath();
-  const python = process.env.FILMMATE_PYTHON || process.env.SCENEFLOW_PYTHON || "/usr/bin/python3";
-  const init = childProcess.spawnSync(python, [hapScript,"init",projectDir,"--title",title||slug], {encoding:"utf8"});
-  if (init.status !== 0) throw new Error(`HAP 초기화 실패: ${(init.stderr||init.stdout||"").trim()}`);
-  for (const scene of analysis.scenes) {
-    const sceneName = `${scene.scene_id}_${scene.title.replace(/[^0-9A-Za-z가-힣._-]+/g,"_")}`;
-    const sceneDir = path.join(projectDir,"scenes",sceneName);
-    const entityId = `scene:${scene.scene_id}`;
-    const add = childProcess.spawnSync(python,[hapScript,"add-entity",projectDir,"--type","scene","--key",scene.scene_id,"--entity-id",entityId,"--parent",`project:${name}`],{encoding:"utf8"});
-    if (add.status !== 0) throw new Error(`HAP 씬 등록 실패: ${(add.stderr||add.stdout||"").trim()}`);
-    const payload = JSON.stringify({scene_id:scene.scene_id,title:scene.title,location:scene.location,time:scene.time,source_span:[scene.source_start,scene.source_end]});
-    const evidence = JSON.stringify([{kind:"source_span",artifact:"input/screenplay/screenplay-pasted.txt",start:scene.source_start,end:scene.source_end}]);
-    const commit = childProcess.spawnSync(python,[hapScript,"commit",projectDir,"--entity",entityId,"--producer","filmmate-importer","--payload",payload,"--evidence",evidence],{encoding:"utf8"});
-    if (commit.status !== 0) throw new Error(`HAP 씬 리비전 실패: ${(commit.stderr||commit.stdout||"").trim()}`);
-    const artifact = childProcess.spawnSync(python,[hapScript,"add-artifact",projectDir,"--revision",`${entityId}@1`,"--kind","screenplay","--file",path.join(sceneDir,"input-screenplay.txt")],{encoding:"utf8"});
-    if (artifact.status !== 0) throw new Error(`HAP 원문 등록 실패: ${(artifact.stderr||artifact.stdout||"").trim()}`);
+  try {
+    await runHapAsync(projectDir, ["init", projectDir, "--title", title || slug]);
+    for (const scene of analysis.scenes) {
+      const sceneName = `${scene.scene_id}_${scene.title.replace(/[^0-9A-Za-z가-힣._-]+/g,"_")}`;
+      const sceneDir = path.join(projectDir,"scenes",sceneName);
+      const entityId = `scene:${scene.scene_id}`;
+      await runHapAsync(projectDir, ["add-entity", projectDir, "--type", "scene", "--key", scene.scene_id, "--entity-id", entityId, "--parent", `project:${name}`]);
+      const payload = JSON.stringify({scene_id:scene.scene_id,title:scene.title,location:scene.location,time:scene.time,source_span:[scene.source_start,scene.source_end]});
+      const evidence = JSON.stringify([{kind:"source_span",artifact:"input/screenplay/screenplay-pasted.txt",start:scene.source_start,end:scene.source_end}]);
+      await runHapAsync(projectDir, ["commit", projectDir, "--entity", entityId, "--producer", "filmmate-importer", "--payload", payload, "--evidence", evidence]);
+      await runHapAsync(projectDir, ["add-artifact", projectDir, "--revision", `${entityId}@1`, "--kind", "screenplay", "--file", path.join(sceneDir,"input-screenplay.txt")]);
+    }
+    const codexSources = await connectCodexSources(projectDir);
+    return { id:name, title:title||slug, scene_count:analysis.scene_count, codex_sources:codexSources };
+  } catch (error) {
+    try { fs.rmSync(projectDir, {recursive:true, force:true}); } catch { /* best effort rollback */ }
+    throw new Error(`E_PROJECT_CREATE_FAILED:${error?.message || error}`);
   }
-  const codexSources = connectCodexSources(projectDir);
-  return { id:name, title:title||slug, scene_count:analysis.scene_count, codex_sources:codexSources };
 });
 
 function createWindow() {

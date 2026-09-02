@@ -26,4 +26,16 @@ contextBridge.exposeInMainWorld("sceneFlow", {
   composeBlockStoryboard: (project, scene, block, items) => ipcRenderer.invoke("storyboard:compose-block", project, scene, block, items),
   saveBlockStoryboard: (project, scene, block, dataUrl) => ipcRenderer.invoke("storyboard:save-composite", project, scene, block, dataUrl),
   exportAiPackage: (project, scene, config) => ipcRenderer.invoke("ai:export-package", project, scene, config),
+  runProductionAgent: (project, scene, request) => ipcRenderer.invoke("production-agent:run", project, scene, request),
+  startProductionRun: (project, scene, request) => ipcRenderer.invoke("production-agent:start-run", project, scene, request),
+  getProductionRun: (project, scene, runId) => ipcRenderer.invoke("production-agent:get-run", project, scene, runId),
+  controlProductionRun: (project, scene, request) => ipcRenderer.invoke("production-agent:control-run", project, scene, request),
+  startProductionWorker: (project, scene, runId) => ipcRenderer.invoke("production-agent:start-worker", project, scene, runId),
+  cancelProductionWorker: runId => ipcRenderer.invoke("production-agent:cancel-worker", runId),
+  productionWorkerStatus: runId => ipcRenderer.invoke("production-agent:worker-status", runId),
+  onProductionAgentWorkerEvent: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("production-agent:worker-event", handler);
+    return () => ipcRenderer.removeListener("production-agent:worker-event", handler);
+  },
 });
