@@ -93,11 +93,21 @@ contextBridge.exposeInMainWorld("virtualCameraVisual", {
   },
 });
 
+contextBridge.exposeInMainWorld("virtualCameraStage", {
+  load: (project, scene) => ipcRenderer.invoke("virtual-camera-stage:load", project, scene),
+  save: (project, scene, blockout) => ipcRenderer.invoke("virtual-camera-stage:save", project, scene, blockout),
+  savePath: (project, scene, request) => ipcRenderer.invoke("virtual-camera-stage:save-path", project, scene, request),
+  listPaths: (project, scene) => ipcRenderer.invoke("virtual-camera-stage:list-paths", project, scene),
+  loadPath: (project, scene, shotId, pathNumber) => ipcRenderer.invoke("virtual-camera-stage:load-path", project, scene, shotId, pathNumber),
+  openFolder: (project, scene) => ipcRenderer.invoke("virtual-camera-stage:open-folder", project, scene),
+});
+
 window.addEventListener("DOMContentLoaded", () => {
   const styles = [
     ["./virtual-camera-ui.css", "base"],
     ["./virtual-camera-pose.css", "pose"],
     ["./virtual-camera-visual.css", "visual"],
+    ["./virtual-camera-stage.css", "stage"],
   ];
   for (const [href, key] of styles) {
     if (document.querySelector(`link[data-filmmate-vcam-style="${key}"]`)) continue;
@@ -108,9 +118,11 @@ window.addEventListener("DOMContentLoaded", () => {
     document.head.appendChild(link);
   }
   const scripts = [
+    ["./virtual-camera-stage-engine.js", "stage-engine"],
     ["./virtual-camera-ui.js", "base"],
     ["./virtual-camera-pose-ui.js", "pose"],
     ["./virtual-camera-visual-ui.js", "visual"],
+    ["./virtual-camera-stage-ui.js", "stage"],
   ];
   for (const [src, key] of scripts) {
     if (document.querySelector(`script[data-filmmate-vcam-script="${key}"]`)) continue;
