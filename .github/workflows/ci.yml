@@ -68,3 +68,4 @@ jobs:
           desktop/python-bridge.test.cjs
           desktop/virtual-camera-core.test.cjs
           desktop/virtual-camera-infra.test.cjs
+          desktop/virtual-camera-visual-core.test.cjs
