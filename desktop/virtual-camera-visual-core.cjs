@@ -23,7 +23,7 @@ function estimateFrameTransform(previous, current, width, height, options = {}) 
   const margin = Math.max(shifts + 3, Math.trunc(Math.min(width, height) * 0.12));
   const cx = (width - 1) / 2;
   const cy = (height - 1) / 2;
-  let best = {dx:0,dy:0,scale:1,score:Infinity};
+  let best = {dx:0,dy:0,scale:1,score:Infinity,objective:Infinity};
   let second = Infinity;
 
   for (const scale of scales) {
@@ -41,9 +41,11 @@ function estimateFrameTransform(previous, current, width, height, options = {}) 
           }
         }
         const score = count ? error / count : Infinity;
-        if (score < best.score) {
+        const identityPenalty = Math.abs(scale - 1) * 0.25 + (Math.abs(dx) + Math.abs(dy)) * 0.001;
+        const objective = score + identityPenalty;
+        if (objective < best.objective) {
           second = best.score;
-          best = {dx,dy,scale,score};
+          best = {dx,dy,scale,score,objective};
         } else if (score < second) {
           second = score;
         }
