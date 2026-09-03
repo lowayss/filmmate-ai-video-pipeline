@@ -3,6 +3,7 @@ const path = require("node:path");
 const {app, ipcMain, shell} = require("electron");
 const {createProjectPathResolver} = require("./project-paths.cjs");
 const stage = require("./virtual-camera-stage-engine.js");
+const stageExport = require("./virtual-camera-stage-export.cjs");
 
 let installed = false;
 const MAX_PATH_SAMPLES = 12000;
@@ -16,6 +17,7 @@ function rootFor(sceneDir) { return path.join(sceneDir, "previews", "virtual-cam
 function sceneFile(sceneDir) { return path.join(rootFor(sceneDir), "blockout.json"); }
 function safeShot(value) { return String(value || "C01").replace(/[^0-9A-Za-z가-힣._-]+/g,"_").replace(/^_+|_+$/g,"").slice(0,80) || "C01"; }
 function writeJsonAtomic(file, value) { fs.mkdirSync(path.dirname(file), {recursive:true}); const tmp=`${file}.${process.pid}.tmp`; fs.writeFileSync(tmp, `${JSON.stringify(value,null,2)}\n`, "utf8"); fs.renameSync(tmp,file); }
+function writeTextAtomic(file, value) { fs.mkdirSync(path.dirname(file), {recursive:true}); const tmp=`${file}.${process.pid}.tmp`; fs.writeFileSync(tmp, String(value), "utf8"); fs.renameSync(tmp,file); }
 
 function loadBlockout(project, scene) {
   const {sceneDir} = resolveScene(project, scene);
@@ -67,6 +69,13 @@ function loadCameraPath(project,scene,shotId,pathNumber) {
   const stat=fs.statSync(file); if(stat.size>8*1024*1024)throw new Error("stage_path_too_large");
   const payload=JSON.parse(fs.readFileSync(file,"utf8")); payload.samples=Array.isArray(payload.samples)?payload.samples.slice(0,MAX_PATH_SAMPLES).map(sanitizeSnapshot):[]; return payload;
 }
+function exportBlender(project,scene,shotId,pathNumber,options={}) {
+  const {sceneDir}=resolveScene(project,scene),blockout=loadBlockout(project,scene),cameraPath=loadCameraPath(project,scene,shotId,pathNumber),fps=Math.max(1,Math.min(120,Math.trunc(Number(options.fps)||30)));
+  const base=`${safeShot(cameraPath.shot_id)}_path_${String(cameraPath.path_number).padStart(3,"0")}`,dir=path.join(rootFor(sceneDir),"exports","blender"),scriptFile=path.join(dir,`${base}.py`),jsonFile=path.join(dir,`${base}.json`);
+  writeTextAtomic(scriptFile,stageExport.blenderScript(blockout,cameraPath,{fps}));
+  writeJsonAtomic(jsonFile,stageExport.interchangePayload(blockout,cameraPath,{fps}));
+  return {target:"blender",preview:true,canonical:false,shot_id:cameraPath.shot_id,path_number:cameraPath.path_number,fps,script_path:scriptFile,json_path:jsonFile};
+}
 
 function installVirtualCameraStage() {
   if(installed)return; installed=true;
@@ -75,7 +84,8 @@ function installVirtualCameraStage() {
   ipcMain.handle("virtual-camera-stage:save-path",(_e,project,scene,request)=>saveCameraPath(project,scene,request));
   ipcMain.handle("virtual-camera-stage:list-paths",(_e,project,scene)=>listCameraPaths(project,scene));
   ipcMain.handle("virtual-camera-stage:load-path",(_e,project,scene,shotId,pathNumber)=>loadCameraPath(project,scene,shotId,pathNumber));
+  ipcMain.handle("virtual-camera-stage:export-blender",async(_e,project,scene,shotId,pathNumber,options)=>{const result=exportBlender(project,scene,shotId,pathNumber,options);shell.showItemInFolder(result.script_path);return result;});
   ipcMain.handle("virtual-camera-stage:open-folder",async(_e,project,scene)=>{const {sceneDir}=resolveScene(project,scene);const root=rootFor(sceneDir);fs.mkdirSync(root,{recursive:true});const error=await shell.openPath(root);if(error)throw new Error(error);return true;});
 }
 
-module.exports={installVirtualCameraStage,loadBlockout,saveBlockout,saveCameraPath,listCameraPaths,loadCameraPath,sanitizeSnapshot};
+module.exports={installVirtualCameraStage,loadBlockout,saveBlockout,saveCameraPath,listCameraPaths,loadCameraPath,exportBlender,sanitizeSnapshot};
