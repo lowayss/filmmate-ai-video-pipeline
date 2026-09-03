@@ -45,6 +45,7 @@
       "virtual-camera-visual.css",
       "virtual-camera-stage-engine.js",
       "virtual-camera-stage-main.cjs",
+      "virtual-camera-stage-export.cjs",
       "virtual-camera-stage-ui.js",
       "virtual-camera-stage.css",
       "prompt-bundle.schema.json",
