@@ -39,3 +39,46 @@ contextBridge.exposeInMainWorld("sceneFlow", {
     return () => ipcRenderer.removeListener("production-agent:worker-event", handler);
   },
 });
+
+contextBridge.exposeInMainWorld("virtualCamera", {
+  startSession: (project, scene) => ipcRenderer.invoke("virtual-camera:start-session", project, scene),
+  stopSession: () => ipcRenderer.invoke("virtual-camera:stop-session"),
+  status: () => ipcRenderer.invoke("virtual-camera:status"),
+  startRecording: request => ipcRenderer.invoke("virtual-camera:start-recording", request),
+  stopRecording: () => ipcRenderer.invoke("virtual-camera:stop-recording"),
+  listTakes: (project, scene) => ipcRenderer.invoke("virtual-camera:list-takes", project, scene),
+  selectTake: (project, scene, shotId, takeNumber) => ipcRenderer.invoke("virtual-camera:select-take", project, scene, shotId, takeNumber),
+  openFolder: (project, scene) => ipcRenderer.invoke("virtual-camera:open-folder", project, scene),
+  copyText: text => ipcRenderer.invoke("virtual-camera:copy-text", text),
+  onSample: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("virtual-camera:sample", handler);
+    return () => ipcRenderer.removeListener("virtual-camera:sample", handler);
+  },
+  onStatus: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("virtual-camera:status", handler);
+    return () => ipcRenderer.removeListener("virtual-camera:status", handler);
+  },
+  onTake: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("virtual-camera:take", handler);
+    return () => ipcRenderer.removeListener("virtual-camera:take", handler);
+  },
+});
+
+window.addEventListener("DOMContentLoaded", () => {
+  if (!document.querySelector('link[data-filmmate-vcam]')) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "./virtual-camera-ui.css";
+    link.dataset.filmmateVcam = "true";
+    document.head.appendChild(link);
+  }
+  if (!document.querySelector('script[data-filmmate-vcam]')) {
+    const script = document.createElement("script");
+    script.src = "./virtual-camera-ui.js";
+    script.dataset.filmmateVcam = "true";
+    document.body.appendChild(script);
+  }
+});
