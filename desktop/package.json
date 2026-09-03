@@ -43,6 +43,11 @@
       "virtual-camera-visual-main.cjs",
       "virtual-camera-visual-ui.js",
       "virtual-camera-visual.css",
+      "virtual-camera-blockout-math.js",
+      "virtual-camera-blockout-main.cjs",
+      "virtual-camera-blockout-renderer.js",
+      "virtual-camera-blockout-ui.js",
+      "virtual-camera-blockout.css",
       "prompt-bundle.schema.json",
       "production-agent-action.schema.json",
       "package.json"
