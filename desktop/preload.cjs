@@ -68,17 +68,27 @@ contextBridge.exposeInMainWorld("virtualCamera", {
 });
 
 window.addEventListener("DOMContentLoaded", () => {
-  if (!document.querySelector('link[data-filmmate-vcam]')) {
+  const styles = [
+    ["./virtual-camera-ui.css", "base"],
+    ["./virtual-camera-pose.css", "pose"],
+  ];
+  for (const [href, key] of styles) {
+    if (document.querySelector(`link[data-filmmate-vcam-style="${key}"]`)) continue;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "./virtual-camera-ui.css";
-    link.dataset.filmmateVcam = "true";
+    link.href = href;
+    link.dataset.filmmateVcamStyle = key;
     document.head.appendChild(link);
   }
-  if (!document.querySelector('script[data-filmmate-vcam]')) {
+  const scripts = [
+    ["./virtual-camera-ui.js", "base"],
+    ["./virtual-camera-pose-ui.js", "pose"],
+  ];
+  for (const [src, key] of scripts) {
+    if (document.querySelector(`script[data-filmmate-vcam-script="${key}"]`)) continue;
     const script = document.createElement("script");
-    script.src = "./virtual-camera-ui.js";
-    script.dataset.filmmateVcam = "true";
+    script.src = src;
+    script.dataset.filmmateVcamScript = key;
     document.body.appendChild(script);
   }
 });
