@@ -99,6 +99,7 @@ contextBridge.exposeInMainWorld("virtualCameraStage", {
   savePath: (project, scene, request) => ipcRenderer.invoke("virtual-camera-stage:save-path", project, scene, request),
   listPaths: (project, scene) => ipcRenderer.invoke("virtual-camera-stage:list-paths", project, scene),
   loadPath: (project, scene, shotId, pathNumber) => ipcRenderer.invoke("virtual-camera-stage:load-path", project, scene, shotId, pathNumber),
+  exportBlender: (project, scene, shotId, pathNumber, options) => ipcRenderer.invoke("virtual-camera-stage:export-blender", project, scene, shotId, pathNumber, options),
   openFolder: (project, scene) => ipcRenderer.invoke("virtual-camera-stage:open-folder", project, scene),
 });
 
