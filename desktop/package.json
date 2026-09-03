@@ -33,8 +33,12 @@
       "production-agent-worker.cjs",
       "virtual-camera-core.cjs",
       "virtual-camera-main.cjs",
+      "virtual-camera-qr.cjs",
+      "virtual-camera-tls.cjs",
       "virtual-camera-ui.js",
       "virtual-camera-ui.css",
+      "virtual-camera-pose-ui.js",
+      "virtual-camera-pose.css",
       "prompt-bundle.schema.json",
       "production-agent-action.schema.json",
       "package.json"
