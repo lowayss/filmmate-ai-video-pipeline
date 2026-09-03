@@ -67,10 +67,37 @@ contextBridge.exposeInMainWorld("virtualCamera", {
   },
 });
 
+contextBridge.exposeInMainWorld("virtualCameraVisual", {
+  startSession: (project, scene) => ipcRenderer.invoke("virtual-camera-visual:start-session", project, scene),
+  stopSession: () => ipcRenderer.invoke("virtual-camera-visual:stop-session"),
+  status: () => ipcRenderer.invoke("virtual-camera-visual:status"),
+  startRecording: request => ipcRenderer.invoke("virtual-camera-visual:start-recording", request),
+  stopRecording: () => ipcRenderer.invoke("virtual-camera-visual:stop-recording"),
+  listTakes: (project, scene) => ipcRenderer.invoke("virtual-camera-visual:list-takes", project, scene),
+  openFolder: (project, scene) => ipcRenderer.invoke("virtual-camera-visual:open-folder", project, scene),
+  copyText: text => ipcRenderer.invoke("virtual-camera-visual:copy-text", text),
+  onSample: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("virtual-camera-visual:sample", handler);
+    return () => ipcRenderer.removeListener("virtual-camera-visual:sample", handler);
+  },
+  onStatus: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("virtual-camera-visual:status", handler);
+    return () => ipcRenderer.removeListener("virtual-camera-visual:status", handler);
+  },
+  onTake: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("virtual-camera-visual:take", handler);
+    return () => ipcRenderer.removeListener("virtual-camera-visual:take", handler);
+  },
+});
+
 window.addEventListener("DOMContentLoaded", () => {
   const styles = [
     ["./virtual-camera-ui.css", "base"],
     ["./virtual-camera-pose.css", "pose"],
+    ["./virtual-camera-visual.css", "visual"],
   ];
   for (const [href, key] of styles) {
     if (document.querySelector(`link[data-filmmate-vcam-style="${key}"]`)) continue;
@@ -83,6 +110,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const scripts = [
     ["./virtual-camera-ui.js", "base"],
     ["./virtual-camera-pose-ui.js", "pose"],
+    ["./virtual-camera-visual-ui.js", "visual"],
   ];
   for (const [src, key] of scripts) {
     if (document.querySelector(`script[data-filmmate-vcam-script="${key}"]`)) continue;
