@@ -70,3 +70,4 @@ jobs:
           desktop/virtual-camera-infra.test.cjs
           desktop/virtual-camera-visual-core.test.cjs
           desktop/virtual-camera-stage-engine.test.cjs
+          desktop/virtual-camera-stage-export.test.cjs
