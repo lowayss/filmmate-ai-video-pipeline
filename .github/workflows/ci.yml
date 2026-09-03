@@ -66,3 +66,4 @@ jobs:
           desktop/production-state.test.cjs
           desktop/project-paths.test.cjs
           desktop/python-bridge.test.cjs
+          desktop/virtual-camera-core.test.cjs

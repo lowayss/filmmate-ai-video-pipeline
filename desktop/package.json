@@ -3,7 +3,7 @@
   "productName": "FilmMate",
   "version": "0.7.2",
   "private": true,
-  "main": "main.cjs",
+  "main": "main-entry.cjs",
   "scripts": {
     "dev": "electron .",
     "build:mac": "electron-builder --mac dir --arm64"
@@ -12,6 +12,7 @@
     "appId": "com.loways.filmmate",
     "productName": "FilmMate",
     "files": [
+      "main-entry.cjs",
       "main.cjs",
       "project-paths.cjs",
       "python-bridge.cjs",
@@ -30,6 +31,10 @@
       "micro-shot-ui.js",
       "codex-worker.cjs",
       "production-agent-worker.cjs",
+      "virtual-camera-core.cjs",
+      "virtual-camera-main.cjs",
+      "virtual-camera-ui.js",
+      "virtual-camera-ui.css",
       "prompt-bundle.schema.json",
       "production-agent-action.schema.json",
       "package.json"
