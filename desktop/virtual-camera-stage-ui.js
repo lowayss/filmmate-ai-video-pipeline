@@ -3,7 +3,7 @@
   const bridge = window.virtualCameraStage;
   if (!stage || !bridge) return;
 
-  const state = {scene:stage.defaultScene(),rig:stage.createRig(),targetKey:null,paths:[],recording:false,pathSamples:[],pathStartedAt:null,lastCaptureAt:0,replaying:false,replayToken:0,error:null};
+  const state = {scene:stage.defaultScene(),rig:stage.createRig(),targetKey:null,paths:[],recording:false,pathSamples:[],pathStartedAt:null,lastCaptureAt:0,replaying:false,replayToken:0,error:null,exportNotice:null};
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   function target() { try { if (typeof selected === "undefined" || !selected) return null; return {project:selected.project,scene:sceneId(selected)}; } catch { return null; } }
   function keyOf(t) { return t ? `${t.project}/${t.scene}` : ""; }
@@ -12,7 +12,7 @@
   async function ensureLoaded(force=false) {
     const t=target(),key=keyOf(t); if(!t)return;
     if(!force && state.targetKey===key)return;
-    state.targetKey=key; state.rig=stage.createRig(); state.replaying=false; state.recording=false; state.pathSamples=[];
+    state.targetKey=key; state.rig=stage.createRig(); state.replaying=false; state.recording=false; state.pathSamples=[]; state.exportNotice=null;
     try { state.scene=stage.normalizeScene(await bridge.load(t.project,t.scene)); state.paths=await bridge.listPaths(t.project,t.scene); state.error=null; }
     catch(error) { state.scene=stage.defaultScene(); state.paths=[]; state.error=error?.message||String(error); }
   }
@@ -28,20 +28,20 @@
   }
   function pathRows() {
     if(!state.paths.length)return `<div class="vcam-empty">저장된 3D Camera Path가 없습니다.</div>`;
-    return state.paths.slice(0,8).map(p=>`<div class="stage-path-row"><div><b>${escapeHtml(p.shot_id)} · PATH ${String(p.path_number).padStart(2,"0")}</b><small>${p.metric?"METRIC":"RELATIVE"} · ${p.sample_count} samples</small></div><button class="btn" data-stage-replay="${escapeHtml(p.shot_id)}" data-stage-path="${p.path_number}">재생</button></div>`).join("");
+    return state.paths.slice(0,8).map(p=>`<div class="stage-path-row"><div><b>${escapeHtml(p.shot_id)} · PATH ${String(p.path_number).padStart(2,"0")}</b><small>${p.metric?"METRIC":"RELATIVE"} · ${p.sample_count} samples</small></div><div class="stage-path-actions"><button class="btn" data-stage-replay="${escapeHtml(p.shot_id)}" data-stage-path="${p.path_number}">재생</button><button class="btn" data-stage-export="${escapeHtml(p.shot_id)}" data-stage-export-path="${p.path_number}">Blender .py</button></div></div>`).join("");
   }
 
   function render() {
     const node=card(); if(!node)return; const c=state.rig.camera;
-    node.innerHTML=`<div class="vcam-card-head"><div><span class="vcam-kicker">LIVE 3D BLOCKOUT · V4</span><h2>휴대폰으로 3D 카메라 직접 운전</h2></div><span class="vcam-status on" id="stage-source">${escapeHtml(state.rig.source.toUpperCase())}${state.rig.metric?" · METRIC":" · RELATIVE"}</span></div>
+    node.innerHTML=`<div class="vcam-card-head"><div><span class="vcam-kicker">LIVE 3D BLOCKOUT · V4/V5</span><h2>휴대폰으로 3D 카메라 직접 운전</h2></div><span class="vcam-status on" id="stage-source">${escapeHtml(state.rig.source.toUpperCase())}${state.rig.metric?" · METRIC":" · RELATIVE"}</span></div>
       <p class="muted">WebXR/Visual 위치와 IMU 회전을 FilmMate 3D 스테이지 카메라에 실시간 적용합니다. +X 오른쪽 · +Y 위 · 카메라 전방 -Z.</p>
-      ${state.error?`<div class="vcam-error">${escapeHtml(state.error)}</div>`:""}
-      <div class="stage-view-wrap"><canvas id="stage-canvas"></canvas><div class="stage-hud"><span id="stage-pos">X ${c.position.x.toFixed(2)} · Y ${c.position.y.toFixed(2)} · Z ${c.position.z.toFixed(2)}</span><span id="stage-fov-hud">${c.fov_deg.toFixed(0)}mm VIEW / ${c.fov_deg.toFixed(0)}° FOV</span></div></div>
+      ${state.error?`<div class="vcam-error">${escapeHtml(state.error)}</div>`:""}${state.exportNotice?`<div class="vcam-note">${escapeHtml(state.exportNotice)}</div>`:""}
+      <div class="stage-view-wrap"><canvas id="stage-canvas"></canvas><div class="stage-hud"><span id="stage-pos">X ${c.position.x.toFixed(2)} · Y ${c.position.y.toFixed(2)} · Z ${c.position.z.toFixed(2)}</span><span id="stage-fov-hud">${c.fov_deg.toFixed(0)}° FOV</span></div></div>
       <div class="stage-toolbar"><button class="btn" id="stage-add-actor">+ Actor</button><button class="btn" id="stage-add-box">+ Block</button><button class="btn" id="stage-reset-camera">카메라 원점</button><button class="btn" id="stage-save">블록아웃 저장</button><button class="btn" id="stage-open-folder">폴더</button></div>
       <div class="stage-fov"><label>FOV <b id="stage-fov-value">${c.fov_deg.toFixed(0)}°</b></label><input id="stage-fov" type="range" min="18" max="100" step="1" value="${c.fov_deg}"></div>
       <div class="stage-path-controls"><label>Shot <input id="stage-shot" value="C01"></label><button class="btn vcam-record" id="stage-record" ${state.recording?"disabled":""}>● 3D PATH REC</button><button class="btn" id="stage-stop" ${state.recording?"":"disabled"}>STOP & SAVE</button><span class="stage-rec-state ${state.recording?"on":""}">${state.recording?`● ${state.pathSamples.length} samples`:state.replaying?"REPLAY":"READY"}</span></div>
       <details class="stage-editor"><summary>블록아웃 위치 편집 <span>${state.scene.objects.length} objects</span></summary><div class="stage-object-list">${objectRows()}</div></details>
-      <div class="stage-path-list"><div class="vcam-card-head"><div><span class="vcam-kicker">3D CAMERA PATHS</span><h3>저장된 경로</h3></div></div>${pathRows()}</div>`;
+      <div class="stage-path-list"><div class="vcam-card-head"><div><span class="vcam-kicker">3D CAMERA PATHS · BLENDER V5</span><h3>저장된 경로</h3></div><label class="stage-export-fps">Blender FPS<select id="stage-export-fps"><option>24</option><option>25</option><option selected>30</option><option>60</option></select></label></div>${pathRows()}</div>`;
     bind(); draw();
   }
 
@@ -56,12 +56,19 @@
     document.getElementById("stage-record")?.addEventListener("click",()=>{state.replaying=false;state.replayToken++;state.recording=true;state.pathSamples=[];state.pathStartedAt=new Date().toISOString();state.lastCaptureAt=0;render();});
     document.getElementById("stage-stop")?.addEventListener("click",stopAndSavePath);
     document.querySelectorAll("[data-stage-replay]").forEach(button=>button.addEventListener("click",()=>replay(button.dataset.stageReplay,Number(button.dataset.stagePath))));
+    document.querySelectorAll("[data-stage-export]").forEach(button=>button.addEventListener("click",()=>exportBlender(button.dataset.stageExport,Number(button.dataset.stageExportPath))));
   }
 
   async function stopAndSavePath() {
     if(!state.recording)return; state.recording=false; const t=target(),shot=document.getElementById("stage-shot")?.value||"C01";
     try { if(!t)throw new Error("씬 정보를 찾지 못했습니다."); await bridge.savePath(t.project,t.scene,{shot_id:shot,started_at:state.pathStartedAt,stopped_at:new Date().toISOString(),samples:state.pathSamples}); state.paths=await bridge.listPaths(t.project,t.scene); state.error=null; }
     catch(error){state.error=error?.message||String(error);} render();
+  }
+
+  async function exportBlender(shotId,pathNumber) {
+    const t=target(); if(!t)return; const fps=Number(document.getElementById("stage-export-fps")?.value||30);
+    try { const result=await bridge.exportBlender(t.project,t.scene,shotId,pathNumber,{fps}); state.error=null; state.exportNotice=`Blender ${fps}fps export 완료 · ${String(result.script_path||"").split(/[\\/]/).pop()}`; render(); }
+    catch(error){state.error=error?.message||String(error);state.exportNotice=null;render();}
   }
 
   function capture(source) {
