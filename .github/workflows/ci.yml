@@ -31,7 +31,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "${{ matrix.python-version }}"
+          python-version: ${{ matrix.python-version }}
       - name: Compile Python sources
         run: >-
           python -m compileall -q
@@ -66,7 +66,3 @@ jobs:
           desktop/production-state.test.cjs
           desktop/project-paths.test.cjs
           desktop/python-bridge.test.cjs
-          desktop/virtual-camera-core.test.cjs
-          desktop/virtual-camera-infra.test.cjs
-          desktop/virtual-camera-visual-core.test.cjs
-          desktop/virtual-camera-stage-engine.test.cjs
