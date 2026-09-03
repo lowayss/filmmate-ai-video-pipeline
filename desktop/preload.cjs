@@ -93,11 +93,38 @@ contextBridge.exposeInMainWorld("virtualCameraVisual", {
   },
 });
 
+contextBridge.exposeInMainWorld("virtualCameraBlockout", {
+  load: (project, scene) => ipcRenderer.invoke("virtual-camera-blockout:load", project, scene),
+  save: (project, scene, state) => ipcRenderer.invoke("virtual-camera-blockout:save", project, scene, state),
+  status: () => ipcRenderer.invoke("virtual-camera-blockout:status"),
+  startTake: (project, scene, request) => ipcRenderer.invoke("virtual-camera-blockout:start-take", project, scene, request),
+  appendFrame: frame => ipcRenderer.invoke("virtual-camera-blockout:append-frame", frame),
+  stopTake: () => ipcRenderer.invoke("virtual-camera-blockout:stop-take"),
+  listTakes: (project, scene) => ipcRenderer.invoke("virtual-camera-blockout:list-takes", project, scene),
+  openFolder: (project, scene) => ipcRenderer.invoke("virtual-camera-blockout:open-folder", project, scene),
+  onStatus: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("virtual-camera-blockout:status", handler);
+    return () => ipcRenderer.removeListener("virtual-camera-blockout:status", handler);
+  },
+  onTake: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("virtual-camera-blockout:take", handler);
+    return () => ipcRenderer.removeListener("virtual-camera-blockout:take", handler);
+  },
+  onLayout: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("virtual-camera-blockout:layout", handler);
+    return () => ipcRenderer.removeListener("virtual-camera-blockout:layout", handler);
+  },
+});
+
 window.addEventListener("DOMContentLoaded", () => {
   const styles = [
     ["./virtual-camera-ui.css", "base"],
     ["./virtual-camera-pose.css", "pose"],
     ["./virtual-camera-visual.css", "visual"],
+    ["./virtual-camera-blockout.css", "blockout"],
   ];
   for (const [href, key] of styles) {
     if (document.querySelector(`link[data-filmmate-vcam-style="${key}"]`)) continue;
@@ -111,11 +138,15 @@ window.addEventListener("DOMContentLoaded", () => {
     ["./virtual-camera-ui.js", "base"],
     ["./virtual-camera-pose-ui.js", "pose"],
     ["./virtual-camera-visual-ui.js", "visual"],
+    ["./virtual-camera-blockout-math.js", "blockout-math"],
+    ["./virtual-camera-blockout-renderer.js", "blockout-renderer"],
+    ["./virtual-camera-blockout-ui.js", "blockout-ui"],
   ];
   for (const [src, key] of scripts) {
     if (document.querySelector(`script[data-filmmate-vcam-script="${key}"]`)) continue;
     const script = document.createElement("script");
     script.src = src;
+    script.async = false;
     script.dataset.filmmateVcamScript = key;
     document.body.appendChild(script);
   }
