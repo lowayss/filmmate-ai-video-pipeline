@@ -39,6 +39,10 @@
       "virtual-camera-ui.css",
       "virtual-camera-pose-ui.js",
       "virtual-camera-pose.css",
+      "virtual-camera-visual-core.cjs",
+      "virtual-camera-visual-main.cjs",
+      "virtual-camera-visual-ui.js",
+      "virtual-camera-visual.css",
       "prompt-bundle.schema.json",
       "production-agent-action.schema.json",
       "package.json"
